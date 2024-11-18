@@ -4,7 +4,7 @@ use warnings;
 use utf8;
 no warnings 'utf8';
 
-use Test::More tests => 69;
+use Test::More tests => 72;
 use Test::Differences;
 unified_diff;
 
@@ -55,26 +55,31 @@ Biber::Config->setblxoption(undef,'uniquework', 1);
 $biber->prepare;
 my $out = $biber->get_output_obj;
 my $section = $biber->sections->get_section(0);
-my $main = $biber->datalists->get_list('nty/global//global/global');
+my $main = $biber->datalists->get_list('nty/global//global/global/global');
 
 my @keys = sort $section->get_citekeys;
-my @citedkeys = sort qw{ alias1 alias2 alias5 anon1 anon2 murray t1 kant:ku kant:kpv t2 shore u1 u2 us1 list1 isbn1 isbn2 markey ent1 verb1 over1 recurse1};
+my @citedkeys = sort qw{ alias1 alias2 alias5 anon1 anon2 matches1 matches2 matches3 murray t1 kant:ku kant:kpv t2 shore u1 u2 us1 list1 isbn1 isbn2 markey ent1 verb1 over1 recurse1};
 
 # entry "loh" is missing as the biber.conf map removes it with map_entry_null
 my @allkeys = sort map {lc()} qw{ anon1 anon2 stdmodel aristotle:poetics vazques-de-parga t1
 gonzalez averroes/bland laufenberg westfahl:frontier knuth:ct:a kastenholz
 averroes/hannes iliad luzzatto malinowski sorace knuth:ct:d britannica
-nietzsche:historie stdmodel:weinberg knuth:ct:b baez/article knuth:ct:e itzhaki
-jaffe padhye cicero stdmodel:salam reese averroes/hercz murray shore
-aristotle:physics massa aristotle:anima gillies set kowalik gaonkar springer
-geer hammond wormanx westfahl:space worman set:herrmann augustine gerhardt
-piccato hasan hyman stdmodel:glashow stdmodel:ps_sc kant:kpv companion almendro
-sigfridsson ctan baez/online aristotle:rhetoric pimentel00 pines knuth:ct:c moraux cms
-angenendt angenendtsk markey cotton vangennepx kant:ku nussbaum nietzsche:ksa1
-vangennep knuth:ct angenendtsa spiegelberg bertram brandt set:aksin chiu nietzsche:ksa
-set:yoon maron coleridge tvonb t2 u1 u2 i1 i2 tmn1 tmn2 tmn3 tmn4 lne1 alias1 alias2 alias5 url1 ol1 pages1 pages2 pages3 pages4 pages5 pages6 pages7 pages8 us1 labelstest list1 sn1 pages9 isbn1 isbn2 snk1 clone-snk1 newtestkey ent1 avona rvonr verb1 over1 others1 others2 recurse1 final};
+nietzsche:historie stdmodel:weinberg knuth:ct:b baez/article knuth:ct:e
+itzhaki jaffe padhye cicero stdmodel:salam reese averroes/hercz murray
+shore aristotle:physics massa aristotle:anima gillies set kowalik gaonkar
+springer geer hammond wormanx westfahl:space worman set:herrmann augustine
+gerhardt piccato hasan hyman stdmodel:glashow stdmodel:ps_sc kant:kpv
+companion almendro sigfridsson ctan baez/online aristotle:rhetoric
+pimentel00 pines knuth:ct:c matches1 matches2 matches3 moraux cms angenendt
+angenendtsk markey cotton vangennepx kant:ku nussbaum nietzsche:ksa1
+vangennep knuth:ct angenendtsa spiegelberg bertram brandt set:aksin chiu
+nietzsche:ksa set:yoon maron coleridge tvonb t2 u1 u2 i1 i2 tmn1 tmn2 tmn3
+tmn4 lne1 alias1 alias2 alias5 url1 ol1 pages1 pages2 pages3 pages4 pages5
+pages6 pages7 pages8 us1 labelstest list1 sn1 pages9 isbn1 isbn2 snk1
+clone-snk1 newtestkey ent1 avona rvonr verb1 over1 others1 others2 recurse1
+final};
 
-my $u1 = q|    \entry{u1}{misc}{}
+my $u1 = q|    \entry{u1}{misc}{}{}
       \name{author}{4}{ul=4}{%
         {{un=0,uniquepart=base,hash=e1faffb3e614e6c2fba74296962386b7}{%
            family={AAA},
@@ -91,10 +96,12 @@ my $u1 = q|    \entry{u1}{misc}{}
       }
       \strng{namehash}{b78abdc838d79b6576f2ed0021642766}
       \strng{fullhash}{b78abdc838d79b6576f2ed0021642766}
+      \strng{fullhashraw}{b78abdc838d79b6576f2ed0021642766}
       \strng{bibnamehash}{b78abdc838d79b6576f2ed0021642766}
       \strng{authorbibnamehash}{b78abdc838d79b6576f2ed0021642766}
       \strng{authornamehash}{b78abdc838d79b6576f2ed0021642766}
       \strng{authorfullhash}{b78abdc838d79b6576f2ed0021642766}
+      \strng{authorfullhashraw}{b78abdc838d79b6576f2ed0021642766}
       \field{labelalpha}{AAA\textbf{+}00}
       \field{sortinit}{A}
       \field{sortinithash}{2f401846e2029bad6b3ecc16d50031e2}
@@ -113,7 +120,7 @@ eq_or_diff( $out->get_output_entry('u1', $main), $u1, 'uniquelist 1' ) ;
 
 is_deeply( \@keys, \@citedkeys, 'citekeys 1') ;
 
-is_deeply($biber->datalists->get_list('shorthand/global//global/global')->get_keys, [ 'kant:kpv', 'kant:ku' ], 'shorthands' ) ;
+is_deeply($biber->datalists->get_list('shorthand/global//global/global/global')->get_keys, [ 'kant:kpv', 'kant:ku' ], 'shorthands' ) ;
 
 # reset some options and re-generate information
 
@@ -136,7 +143,7 @@ $out = $biber->get_output_obj;
 
 is_deeply( \@keys, \@allkeys, 'citekeys 2') ;
 
-my $murray1 = q|    \entry{murray}{article}{}
+my $murray1 = q|    \entry{murray}{article}{}{}
       \name{author}{14}{}{%
         {{un=0,uniquepart=base,hash=1c180cd8a2042c60a0f1dda22e34794a}{%
            family={Hostetler},
@@ -225,10 +232,12 @@ my $murray1 = q|    \entry{murray}{article}{}
       }
       \strng{namehash}{0c2086c92b65b24b0fb04b9462cf6c00}
       \strng{fullhash}{1572cc3fd324f560e5e71d041a6bd764}
+      \strng{fullhashraw}{1572cc3fd324f560e5e71d041a6bd764}
       \strng{bibnamehash}{132c55db0f03fae26126bc20d94cd834}
       \strng{authorbibnamehash}{132c55db0f03fae26126bc20d94cd834}
       \strng{authornamehash}{0c2086c92b65b24b0fb04b9462cf6c00}
       \strng{authorfullhash}{1572cc3fd324f560e5e71d041a6bd764}
+      \strng{authorfullhashraw}{1572cc3fd324f560e5e71d041a6bd764}
       \field{labelalpha}{Hos\textbf{+}98}
       \field{sortinit}{H}
       \field{sortinithash}{23a3aa7c24e56cfa16945d55545109b5}
@@ -253,7 +262,7 @@ my $murray1 = q|    \entry{murray}{article}{}
     \endentry
 |;
 
-my $murray2 = q|    \entry{murray}{article}{}
+my $murray2 = q|    \entry{murray}{article}{}{}
       \name{author}{14}{}{%
         {{un=0,uniquepart=base,hash=1c180cd8a2042c60a0f1dda22e34794a}{%
            family={Hostetler},
@@ -342,10 +351,12 @@ my $murray2 = q|    \entry{murray}{article}{}
       }
       \strng{namehash}{0c2086c92b65b24b0fb04b9462cf6c00}
       \strng{fullhash}{1572cc3fd324f560e5e71d041a6bd764}
+      \strng{fullhashraw}{1572cc3fd324f560e5e71d041a6bd764}
       \strng{bibnamehash}{132c55db0f03fae26126bc20d94cd834}
       \strng{authorbibnamehash}{132c55db0f03fae26126bc20d94cd834}
       \strng{authornamehash}{0c2086c92b65b24b0fb04b9462cf6c00}
       \strng{authorfullhash}{1572cc3fd324f560e5e71d041a6bd764}
+      \strng{authorfullhashraw}{1572cc3fd324f560e5e71d041a6bd764}
       \field{labelalpha}{Hos98}
       \field{sortinit}{H}
       \field{sortinithash}{23a3aa7c24e56cfa16945d55545109b5}
@@ -371,7 +382,7 @@ my $murray2 = q|    \entry{murray}{article}{}
 |;
 
 # This example wouldn't compile - it's just to test escaping
-my $t1 = q+    \entry{t1}{misc}{}
+my $t1 = q+    \entry{t1}{misc}{}{}
       \name{author}{1}{}{%
         {{un=0,uniquepart=base,hash=858fcf9483ec29b7707a7dda2dde7a6f}{%
            family={Brown},
@@ -382,10 +393,12 @@ my $t1 = q+    \entry{t1}{misc}{}
       }
       \strng{namehash}{858fcf9483ec29b7707a7dda2dde7a6f}
       \strng{fullhash}{858fcf9483ec29b7707a7dda2dde7a6f}
+      \strng{fullhashraw}{858fcf9483ec29b7707a7dda2dde7a6f}
       \strng{bibnamehash}{858fcf9483ec29b7707a7dda2dde7a6f}
       \strng{authorbibnamehash}{858fcf9483ec29b7707a7dda2dde7a6f}
       \strng{authornamehash}{858fcf9483ec29b7707a7dda2dde7a6f}
       \strng{authorfullhash}{858fcf9483ec29b7707a7dda2dde7a6f}
+      \strng{authorfullhashraw}{858fcf9483ec29b7707a7dda2dde7a6f}
       \field{extraname}{1}
       \field{labelalpha}{Bro92}
       \field{sortinit}{B}
@@ -401,7 +414,7 @@ my $t1 = q+    \entry{t1}{misc}{}
     \endentry
 +;
 
-my $t2 = q|    \entry{t2}{misc}{}
+my $t2 = q|    \entry{t2}{misc}{}{}
       \name{author}{1}{}{%
         {{un=0,uniquepart=base,hash=858fcf9483ec29b7707a7dda2dde7a6f}{%
            family={Brown},
@@ -412,10 +425,12 @@ my $t2 = q|    \entry{t2}{misc}{}
       }
       \strng{namehash}{858fcf9483ec29b7707a7dda2dde7a6f}
       \strng{fullhash}{858fcf9483ec29b7707a7dda2dde7a6f}
+      \strng{fullhashraw}{858fcf9483ec29b7707a7dda2dde7a6f}
       \strng{bibnamehash}{858fcf9483ec29b7707a7dda2dde7a6f}
       \strng{authorbibnamehash}{858fcf9483ec29b7707a7dda2dde7a6f}
       \strng{authornamehash}{858fcf9483ec29b7707a7dda2dde7a6f}
       \strng{authorfullhash}{858fcf9483ec29b7707a7dda2dde7a6f}
+      \strng{authorfullhashraw}{858fcf9483ec29b7707a7dda2dde7a6f}
       \field{extraname}{2}
       \field{labelalpha}{Bro94}
       \field{sortinit}{B}
@@ -430,7 +445,7 @@ my $t2 = q|    \entry{t2}{misc}{}
     \endentry
 |;
 
-my $anon1 = q|    \entry{anon1}{unpublished}{}
+my $anon1 = q|    \entry{anon1}{unpublished}{}{}
       \name{author}{1}{}{%
         {{hash=a66f357fe2fd356fe49959173522a651}{%
            family={AnonymousX},
@@ -443,13 +458,16 @@ my $anon1 = q|    \entry{anon1}{unpublished}{}
       }
       \strng{namehash}{9873a6cc65c553faa2b21aaad626fe4b}
       \strng{fullhash}{a66f357fe2fd356fe49959173522a651}
+      \strng{fullhashraw}{a66f357fe2fd356fe49959173522a651}
       \strng{bibnamehash}{9873a6cc65c553faa2b21aaad626fe4b}
       \strng{authorbibnamehash}{a66f357fe2fd356fe49959173522a651}
       \strng{authornamehash}{a66f357fe2fd356fe49959173522a651}
       \strng{authorfullhash}{a66f357fe2fd356fe49959173522a651}
+      \strng{authorfullhashraw}{a66f357fe2fd356fe49959173522a651}
       \strng{shortauthorbibnamehash}{9873a6cc65c553faa2b21aaad626fe4b}
       \strng{shortauthornamehash}{9873a6cc65c553faa2b21aaad626fe4b}
       \strng{shortauthorfullhash}{9873a6cc65c553faa2b21aaad626fe4b}
+      \strng{shortauthorfullhashraw}{9873a6cc65c553faa2b21aaad626fe4b}
       \field{labelalpha}{XAn35}
       \field{sortinit}{A}
       \field{sortinithash}{2f401846e2029bad6b3ecc16d50031e2}
@@ -469,7 +487,7 @@ my $anon1 = q|    \entry{anon1}{unpublished}{}
     \endentry
 |;
 
-my $anon2 = q|    \entry{anon2}{unpublished}{}
+my $anon2 = q|    \entry{anon2}{unpublished}{}{}
       \name{author}{1}{}{%
         {{hash=a0bccee4041bc840e14c06e5ba7f083c}{%
            family={AnonymousY},
@@ -482,13 +500,16 @@ my $anon2 = q|    \entry{anon2}{unpublished}{}
       }
       \strng{namehash}{f64c29e89ea49402b997956610b58ef6}
       \strng{fullhash}{a0bccee4041bc840e14c06e5ba7f083c}
+      \strng{fullhashraw}{a0bccee4041bc840e14c06e5ba7f083c}
       \strng{bibnamehash}{f64c29e89ea49402b997956610b58ef6}
       \strng{authorbibnamehash}{a0bccee4041bc840e14c06e5ba7f083c}
       \strng{authornamehash}{a0bccee4041bc840e14c06e5ba7f083c}
       \strng{authorfullhash}{a0bccee4041bc840e14c06e5ba7f083c}
+      \strng{authorfullhashraw}{a0bccee4041bc840e14c06e5ba7f083c}
       \strng{shortauthorbibnamehash}{f64c29e89ea49402b997956610b58ef6}
       \strng{shortauthornamehash}{f64c29e89ea49402b997956610b58ef6}
       \strng{shortauthorfullhash}{f64c29e89ea49402b997956610b58ef6}
+      \strng{shortauthorfullhashraw}{f64c29e89ea49402b997956610b58ef6}
       \field{labelalpha}{YAn39}
       \field{sortinit}{A}
       \field{sortinithash}{2f401846e2029bad6b3ecc16d50031e2}
@@ -508,7 +529,7 @@ my $anon2 = q|    \entry{anon2}{unpublished}{}
     \endentry
 |;
 
-my $url1 = q|    \entry{url1}{misc}{}
+my $url1 = q|    \entry{url1}{misc}{}{}
       \name{author}{1}{}{%
         {{un=0,uniquepart=base,hash=b2106a3dda6c5a4879a0cab37e9cca55}{%
            family={Alias},
@@ -519,10 +540,12 @@ my $url1 = q|    \entry{url1}{misc}{}
       }
       \strng{namehash}{b2106a3dda6c5a4879a0cab37e9cca55}
       \strng{fullhash}{b2106a3dda6c5a4879a0cab37e9cca55}
+      \strng{fullhashraw}{b2106a3dda6c5a4879a0cab37e9cca55}
       \strng{bibnamehash}{b2106a3dda6c5a4879a0cab37e9cca55}
       \strng{authorbibnamehash}{b2106a3dda6c5a4879a0cab37e9cca55}
       \strng{authornamehash}{b2106a3dda6c5a4879a0cab37e9cca55}
       \strng{authorfullhash}{b2106a3dda6c5a4879a0cab37e9cca55}
+      \strng{authorfullhashraw}{b2106a3dda6c5a4879a0cab37e9cca55}
       \field{extraname}{4}
       \field{labelalpha}{Ali05}
       \field{sortinit}{A}
@@ -537,6 +560,10 @@ my $url1 = q|    \entry{url1}{misc}{}
       \verb{url}
       \verb http://www.something.com/q=%C3%A1%C5%A0
       \endverb
+      \lverb{urlsraw}{2}
+      \lverb http://www.something.com/q=áŠ
+      \lverb http://www.sun.com
+      \endlverb
       \lverb{urls}{2}
       \lverb http://www.something.com/q=%C3%A1%C5%A0
       \lverb http://www.sun.com
@@ -544,7 +571,7 @@ my $url1 = q|    \entry{url1}{misc}{}
     \endentry
 |;
 
-my $list1 = q|    \entry{list1}{book}{}
+my $list1 = q|    \entry{list1}{book}{}{}
       \true{morelocation}
       \list{location}{2}{%
         {ÁAA}%
@@ -555,7 +582,7 @@ my $list1 = q|    \entry{list1}{book}{}
     \endentry
 |;
 
-my $over1 = q|    \entry{over1}{book}{}
+my $over1 = q|    \entry{over1}{book}{}{}
       \field{sortinit}{}
       \field{sortinithash}{495dc9894017a8b12cafa9c619d10c0c}
       \field{userd}{thing}
@@ -588,7 +615,7 @@ $section->del_everykeys;
 Biber::Input::file::bibtex->init_cache;
 $biber->prepare;
 $section = $biber->sections->get_section(0);
-$main = $biber->datalists->get_list('nty/global//global/global');
+$main = $biber->datalists->get_list('nty/global//global/global/global');
 
 $out = $biber->get_output_obj;
 
@@ -644,7 +671,7 @@ $section->del_everykeys;
 Biber::Input::file::bibtex->init_cache;
 $biber->prepare;
 $section = $biber->sections->get_section(0);
-$main = $biber->datalists->get_list('nty/global//global/global');
+$main = $biber->datalists->get_list('nty/global//global/global/global');
 
 eq_or_diff($main->get_visible_cite($bibentries->entry('tmn1')->get_field($bibentries->entry('tmn1')->get_labelname_info)->get_id), '1', 'per_type maxcitenames - 1');
 eq_or_diff($main->get_visible_cite($bibentries->entry('tmn2')->get_field($bibentries->entry('tmn2')->get_labelname_info)->get_id), '3', 'per_type maxcitenames - 2');
@@ -692,7 +719,7 @@ eq_or_diff( $out->get_output_entry('list1', $main), $list1, 'Entry with others l
 # source->target mapping with overwrite test
 eq_or_diff($out->get_output_entry('over1', $main), $over1, 'Overwrite test - 1');
 
-my $isbn1 = q|    \entry{isbn1}{misc}{}
+my $isbn1 = q|    \entry{isbn1}{misc}{}{}
       \name{author}{1}{}{%
         {{un=0,uniquepart=base,hash=f6595ccb9db5f634e7bb242a3f78e5f9}{%
            family={Flummox},
@@ -703,10 +730,12 @@ my $isbn1 = q|    \entry{isbn1}{misc}{}
       }
       \strng{namehash}{f6595ccb9db5f634e7bb242a3f78e5f9}
       \strng{fullhash}{f6595ccb9db5f634e7bb242a3f78e5f9}
+      \strng{fullhashraw}{f6595ccb9db5f634e7bb242a3f78e5f9}
       \strng{bibnamehash}{f6595ccb9db5f634e7bb242a3f78e5f9}
       \strng{authorbibnamehash}{f6595ccb9db5f634e7bb242a3f78e5f9}
       \strng{authornamehash}{f6595ccb9db5f634e7bb242a3f78e5f9}
       \strng{authorfullhash}{f6595ccb9db5f634e7bb242a3f78e5f9}
+      \strng{authorfullhashraw}{f6595ccb9db5f634e7bb242a3f78e5f9}
       \field{extraname}{1}
       \field{labelalpha}{Flu}
       \field{sortinit}{F}
@@ -717,7 +746,7 @@ my $isbn1 = q|    \entry{isbn1}{misc}{}
     \endentry
 |;
 
-my $isbn2 = q|    \entry{isbn2}{misc}{}
+my $isbn2 = q|    \entry{isbn2}{misc}{}{}
       \name{author}{1}{}{%
         {{un=0,uniquepart=base,hash=f6595ccb9db5f634e7bb242a3f78e5f9}{%
            family={Flummox},
@@ -728,10 +757,12 @@ my $isbn2 = q|    \entry{isbn2}{misc}{}
       }
       \strng{namehash}{f6595ccb9db5f634e7bb242a3f78e5f9}
       \strng{fullhash}{f6595ccb9db5f634e7bb242a3f78e5f9}
+      \strng{fullhashraw}{f6595ccb9db5f634e7bb242a3f78e5f9}
       \strng{bibnamehash}{f6595ccb9db5f634e7bb242a3f78e5f9}
       \strng{authorbibnamehash}{f6595ccb9db5f634e7bb242a3f78e5f9}
       \strng{authornamehash}{f6595ccb9db5f634e7bb242a3f78e5f9}
       \strng{authorfullhash}{f6595ccb9db5f634e7bb242a3f78e5f9}
+      \strng{authorfullhashraw}{f6595ccb9db5f634e7bb242a3f78e5f9}
       \field{extraname}{2}
       \field{labelalpha}{Flu}
       \field{sortinit}{F}
@@ -746,7 +777,7 @@ my $isbn2 = q|    \entry{isbn2}{misc}{}
 eq_or_diff($out->get_output_entry('isbn1', $main), $isbn1, 'ISBN options - 1');
 eq_or_diff($out->get_output_entry('isbn2', $main), $isbn2, 'ISBN options - 2');
 
-my $new1 = q|    \entry{newtestkey}{book}{}
+my $new1 = q|    \entry{newtestkey}{book}{}{}
       \field{sortinit}{}
       \field{sortinithash}{495dc9894017a8b12cafa9c619d10c0c}
       \field{note}{note}
@@ -755,7 +786,7 @@ my $new1 = q|    \entry{newtestkey}{book}{}
     \endentry
 |;
 
-my $clone1 = q|    \entry{snk1}{book}{}
+my $clone1 = q|    \entry{snk1}{book}{}{}
       \name{author}{1}{}{%
         {{un=0,uniquepart=base,hash=83330b0520b5d4ea57529a23b404d43d}{%
            family={Doe},
@@ -771,10 +802,12 @@ my $clone1 = q|    \entry{snk1}{book}{}
       }
       \strng{namehash}{83330b0520b5d4ea57529a23b404d43d}
       \strng{fullhash}{83330b0520b5d4ea57529a23b404d43d}
+      \strng{fullhashraw}{83330b0520b5d4ea57529a23b404d43d}
       \strng{bibnamehash}{83330b0520b5d4ea57529a23b404d43d}
       \strng{authorbibnamehash}{83330b0520b5d4ea57529a23b404d43d}
       \strng{authornamehash}{83330b0520b5d4ea57529a23b404d43d}
       \strng{authorfullhash}{83330b0520b5d4ea57529a23b404d43d}
+      \strng{authorfullhashraw}{83330b0520b5d4ea57529a23b404d43d}
       \field{extraname}{2}
       \field{labelalpha}{vDoe}
       \field{sortinit}{v}
@@ -784,7 +817,7 @@ my $clone1 = q|    \entry{snk1}{book}{}
     \endentry
 |;
 
-my $clone2 = q|    \entry{clone-snk1}{book}{}
+my $clone2 = q|    \entry{clone-snk1}{book}{}{}
       \name{author}{1}{}{%
         {{un=0,uniquepart=base,hash=83330b0520b5d4ea57529a23b404d43d}{%
            family={Doe},
@@ -800,10 +833,12 @@ my $clone2 = q|    \entry{clone-snk1}{book}{}
       }
       \strng{namehash}{83330b0520b5d4ea57529a23b404d43d}
       \strng{fullhash}{83330b0520b5d4ea57529a23b404d43d}
+      \strng{fullhashraw}{83330b0520b5d4ea57529a23b404d43d}
       \strng{bibnamehash}{83330b0520b5d4ea57529a23b404d43d}
       \strng{authorbibnamehash}{83330b0520b5d4ea57529a23b404d43d}
       \strng{authornamehash}{83330b0520b5d4ea57529a23b404d43d}
       \strng{authorfullhash}{83330b0520b5d4ea57529a23b404d43d}
+      \strng{authorfullhashraw}{83330b0520b5d4ea57529a23b404d43d}
       \field{extraname}{1}
       \field{labelalpha}{vDoe}
       \field{sortinit}{v}
@@ -814,7 +849,7 @@ my $clone2 = q|    \entry{clone-snk1}{book}{}
     \endentry
 |;
 
-my $ent1 = q|    \entry{ent1}{book}{}
+my $ent1 = q|    \entry{ent1}{book}{}{}
       \name{author}{2}{sortingnamekeytemplatename=snks1}{%
         {{un=0,uniquepart=base,hash=6b3653417f9aa97391c37cff5dfda7fa}{%
            family={Smith},
@@ -833,10 +868,12 @@ my $ent1 = q|    \entry{ent1}{book}{}
       }
       \strng{namehash}{b2536a425d549b46de5f21c4d468050a}
       \strng{fullhash}{b2536a425d549b46de5f21c4d468050a}
+      \strng{fullhashraw}{b2536a425d549b46de5f21c4d468050a}
       \strng{bibnamehash}{b2536a425d549b46de5f21c4d468050a}
       \strng{authorbibnamehash}{b2536a425d549b46de5f21c4d468050a}
       \strng{authornamehash}{b2536a425d549b46de5f21c4d468050a}
       \strng{authorfullhash}{b2536a425d549b46de5f21c4d468050a}
+      \strng{authorfullhashraw}{b2536a425d549b46de5f21c4d468050a}
       \field{labelalpha}{SdB}
       \field{sortinit}{S}
       \field{sortinithash}{b164b07b29984b41daf1e85279fbc5ab}
@@ -845,7 +882,7 @@ my $ent1 = q|    \entry{ent1}{book}{}
     \endentry
 |;
 
-my $verb1 = q|    \entry{verb1}{book}{}
+my $verb1 = q|    \entry{verb1}{book}{}{}
       \name{author}{1}{}{%
         {{un=0,uniquepart=base,hash=cac5a25f503e71f5ef28f474e14007b6}{%
            family={Allright},
@@ -856,10 +893,12 @@ my $verb1 = q|    \entry{verb1}{book}{}
       }
       \strng{namehash}{cac5a25f503e71f5ef28f474e14007b6}
       \strng{fullhash}{cac5a25f503e71f5ef28f474e14007b6}
+      \strng{fullhashraw}{cac5a25f503e71f5ef28f474e14007b6}
       \strng{bibnamehash}{cac5a25f503e71f5ef28f474e14007b6}
       \strng{authorbibnamehash}{cac5a25f503e71f5ef28f474e14007b6}
       \strng{authornamehash}{cac5a25f503e71f5ef28f474e14007b6}
       \strng{authorfullhash}{cac5a25f503e71f5ef28f474e14007b6}
+      \strng{authorfullhashraw}{cac5a25f503e71f5ef28f474e14007b6}
       \field{labelalpha}{All}
       \field{sortinit}{A}
       \field{sortinithash}{2f401846e2029bad6b3ecc16d50031e2}
@@ -892,3 +931,7 @@ eq_or_diff($out->get_output_entry('ent1', $main), $ent1, 'Extended name test - 1
 # Verbatim decode test
 eq_or_diff($out->get_output_entry('verb1', $main), $verb1, 'Decoding verbatim fields - 1');
 
+# Static matches list test
+eq_or_diff($bibentries->entry('matches1')->get_field('note'), '1', 'Static match list - 1');
+eq_or_diff($bibentries->entry('matches2')->get_field('note'), '3', 'Static match list - 2');
+eq_or_diff($bibentries->entry('matches3')->get_field('note'), '2', 'Static match list - 3');

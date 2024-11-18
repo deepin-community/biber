@@ -4,11 +4,14 @@ Upstream-Contact: Philip Kime <Philip@kime.org.uk>
 Source: http://biblatex-biber.sourceforge.net/
 
 Files: *
-Copyright: François Charette <firmicus@ankabut.net>, Philip Kime <Philip@kime.org.uk>
+Copyright: 2009-2020, François Charette <firmicus@ankabut.net>
+           2009-2020, Philip Kime <Philip@kime.org.uk>
 License: GPL-1+ or Artistic-2.0
 
 Files: debian/*
-Copyright: 2012, Danai SAE-HAN (韓達耐) <danai@debian.org>
+Copyright: 2012-2013, Danai SAE-HAN (韓達耐) <danai@debian.org>
+           2013-2021, Norbert Preining <preining@debian.org>
+           2015-2024, Hilmar Preuße <hille42@web.de>
 License: GPL-1+
 
 License: Artistic-2.0
@@ -204,4 +207,3 @@ License: GPL-1+
  .
  On Debian systems, the complete text of version 1 of the GNU General
  Public License can be found in `/usr/share/common-licenses/GPL-1'.
-

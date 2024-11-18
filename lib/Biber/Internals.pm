@@ -45,17 +45,41 @@ sub _getnamehash {
   my $bee = $be->get_field('entrytype');
 
   my $hashkey = '';
-  my $count = $names->count_names;
+  my $count = $names->count;
   my $visible = $bib ? $dlist->get_visible_bib($names->get_id) : $dlist->get_visible_cite($names->get_id);
   my $dm = Biber::Config->get_dm;
   my @nps = $dm->get_constant_value('nameparts');
 
+  # refcontext or per-entry namehashtemplate
+  my $nhtname = Biber::Config->getblxoption($secnum, 'namehashtemplatename', undef, $citekey) // $dlist->get_namehashtemplatename;
+
+  # Per-namelist namehashtemplate
+  if (defined($names->get_namehashtemplatename)) {
+    $nhtname = $names->get_namehashtemplatename;
+  }
+
   # namehash obeys list truncations but not uniquename
   foreach my $n ($names->first_n_names($visible)->@*) {
+
+    # use user-defined hashid for hash generation if present
+    if (my $hid = $n->get_hashid) {
+      $hashkey .= $hid;
+      next;
+    }
+
+    # Per-name namehashtemplate
+    if (defined($n->get_namehashtemplatename)) {
+      $nhtname = $n->get_namehashtemplatename;
+    }
+
+    my $nht = Biber::Config->getblxoption($secnum, 'namehashtemplate')->{$nhtname};
+
+    unless ($nht) {
+      biber_error("No namehash template called '$nhtname'");
+    }
+
     foreach my $nt (@nps) {# list type so returns list
-      if (my $np = $n->get_namepart($nt)) {
-        $hashkey .= $np;
-      }
+      $hashkey .= $n->get_hash_namepart($nt, $nht);
     }
   }
 
@@ -78,15 +102,66 @@ sub _getnamehash {
 }
 
 sub _getfullhash {
-  my ($self, $citekey, $names) = @_;
+  my ($self, $citekey, $names, $dlist) = @_;
   my $hashkey = '';
+  my $secnum = $self->get_current_section;
+  my $dm = Biber::Config->get_dm;
+  my @nps = $dm->get_constant_value('nameparts');
+
+  # refcontext or per-entry namehashtemplate
+  my $nhtname = Biber::Config->getblxoption($secnum, 'namehashtemplatename', undef, $citekey) // $dlist->get_namehashtemplatename;
+
+  # Per-namelist namehashtemplate
+  if (defined($names->get_namehashtemplatename)) {
+    $nhtname = $names->get_namehashtemplatename;
+  }
+
+  foreach my $n ($names->names->@*) {
+
+    # use user-defined hashid for hash generation if present
+    if (my $hid = $n->get_hashid) {
+      $hashkey .= $hid;
+      next;
+    }
+
+    # Per-name namehashtemplate
+    if (defined($n->get_namehashtemplatename)) {
+      $nhtname = $n->get_namehashtemplatename;
+    }
+
+    my $nht = Biber::Config->getblxoption($secnum, 'namehashtemplate')->{$nhtname};
+
+    unless ($nht) {
+      biber_error("No namehash template called '$nhtname'");
+    }
+
+    foreach my $nt (@nps) {# list type so returns list
+      $hashkey .= strip_nonamestring($n->get_hash_namepart($nt, $nht),  $names->get_type);
+    }
+  }
+
+  # If we had an "and others"
+  if ($names->get_morenames) {
+    $hashkey .= '+'
+  }
+
+  # Digest::MD5 can't deal with straight UTF8 so encode it first (via NFC as this is "output")
+  return md5_hex(encode_utf8(NFC(normalise_string_hash($hashkey))));
+}
+
+# fullhash without any namehashtemplate. Basically a hash of all full nameparts present in the .bib,
+# after any sourcemaps, naturally
+sub _getfullhashraw {
+  my ($self, $citekey, $names, $dlist) = @_;
+  my $hashkey = '';
+  my $secnum = $self->get_current_section;
   my $dm = Biber::Config->get_dm;
   my @nps = $dm->get_constant_value('nameparts');
 
   foreach my $n ($names->names->@*) {
     foreach my $nt (@nps) {# list type so returns list
       if (my $np = $n->get_namepart($nt)) {
-        $hashkey .= $np;
+        $hashkey .= strip_nonamestring($np, $names->get_type);
       }
     }
   }
@@ -100,7 +175,7 @@ sub _getfullhash {
   return md5_hex(encode_utf8(NFC(normalise_string_hash($hashkey))));
 }
 
-# Same as _getnamehash but takes account of uniquename setting for firstname
+# Same as _getnamehash but takes account of uniquename template
 # It's used for extra* tracking only
 sub _getnamehash_u {
   my ($self, $citekey, $names, $dlist) = @_;
@@ -110,7 +185,7 @@ sub _getnamehash_u {
   my $bee = $be->get_field('entrytype');
 
   my $hashkey = '';
-  my $count = $names->count_names;
+  my $count = $names->count;
   my $nlid = $names->get_id;
   my $visible = $dlist->get_visible_cite($nlid);
   my $dm = Biber::Config->get_dm;
@@ -127,6 +202,7 @@ sub _getnamehash_u {
   # namehash obeys list truncations
   foreach my $n ($names->first_n_names($visible)->@*) {
     my $nid = $n->get_id;
+
     # Per-name uniquenametemplate
     if (defined($n->get_uniquenametemplatename)) {
       $untname = $n->get_uniquenametemplatename;
@@ -178,20 +254,44 @@ sub _getnamehash_u {
 
 # Special hash to track per-name information
 sub _genpnhash {
-  my ($self, $citekey, $n) = @_;
+  my ($self, $citekey, $names, $n, $dlist) = @_;
   my $hashkey = '';
+  my $secnum = $self->get_current_section;
   my $dm = Biber::Config->get_dm;
   my @nps = $dm->get_constant_value('nameparts');
 
+  # use user-defined hashid for hash generation if present
+  if (my $hid = $n->get_hashid) {
+    return md5_hex(encode_utf8(NFC(normalise_string_hash($hid))));
+  }
+
+  # refcontext or per-entry namehashtemplate
+  my $nhtname = Biber::Config->getblxoption($secnum, 'namehashtemplatename', undef, $citekey) // $dlist->get_namehashtemplatename;
+
+  # Per-namelist namehashtemplate
+  if (defined($names->get_namehashtemplatename)) {
+    $nhtname = $names->get_namehashtemplatename;
+  }
+
+  # Per-name namehashtemplate
+  if (defined($n->get_namehashtemplatename)) {
+    $nhtname = $n->get_namehashtemplatename;
+  }
+
+  my $nht = Biber::Config->getblxoption($secnum, 'namehashtemplate')->{$nhtname};
+
+  unless ($nht) {
+    biber_error("No namehash template called '$nhtname'");
+  }
+
   foreach my $nt (@nps) {# list type so returns list
-    if (my $np = $n->get_namepart($nt)) {
-      $hashkey .= $np;
-    }
+    $hashkey .= $n->get_hash_namepart($nt, $nht);
   }
 
   if ($logger->is_trace()) { # performance shortcut
     $logger->trace("Creating MD5 pnhash using '$hashkey'");
   }
+
   # Digest::MD5 can't deal with straight UTF8 so encode it first (via NFC as this is "output")
   return md5_hex(encode_utf8(NFC(normalise_string_hash($hashkey))));
 }
@@ -205,16 +305,16 @@ sub _genpnhash {
 # or dm fields which need special treatment. Technically users could remove such fields
 # from the dm but it would be very strange.
 my %internal_dispatch_label = (
-                'label'             =>  [\&_label_basic,            ['label', 'nostrip']],
-                'shorthand'         =>  [\&_label_basic,            ['shorthand', 'nostrip']],
-                'sortkey'           =>  [\&_label_basic,            ['sortkey', 'nostrip']],
-                'citekey'           =>  [\&_label_citekey,          []],
-                'entrykey'          =>  [\&_label_citekey,          []],
-                'labelname'         =>  [\&_label_name,             ['labelname']],
-                'labeltitle'        =>  [\&_label_basic,            ['labeltitle']],
-                'labelmonth'        =>  [\&_label_basic,            ['labelmonth']],
-                'labelday'          =>  [\&_label_basic,            ['labelday']],
-                'labelyear'         =>  [\&_label_basic,            ['labelyear']]);
+                'label'      =>  [\&_label_basic,   ['label', 'nostrip']],
+                'shorthand'  =>  [\&_label_basic,   ['shorthand', 'nostrip']],
+                'sortkey'    =>  [\&_label_basic,   ['sortkey', 'nostrip']],
+                'citekey'    =>  [\&_label_citekey, []],
+                'entrykey'   =>  [\&_label_citekey, []],
+                'labelname'  =>  [\&_label_name,    ['labelname']],
+                'labeltitle' =>  [\&_label_basic,   ['labeltitle']],
+                'labelmonth' =>  [\&_label_basic,   ['labelmonth']],
+                'labelday'   =>  [\&_label_basic,   ['labelday']],
+                'labelyear'  =>  [\&_label_basic,   ['labelyear']]);
 
 sub _dispatch_table_label {
   my ($field, $dm) = @_;
@@ -284,7 +384,7 @@ sub _labelpart {
       }
       if ( first {$f eq $_} $dm->get_fields_of_type('list', 'name')->@*) {
         my $name = $be->get_field($f) || next; # just in case there is no labelname etc.
-        my $total_names = $name->count_names;
+        my $total_names = $name->count;
         my $visible_names;
         if ($total_names > $maxan) {
           $visible_names = $minan;
@@ -356,7 +456,7 @@ sub _dispatch_label {
 
 sub _label_citekey {
   my ($self, $citekey, $secnum, $section, $be, $args, $labelattrs, $dlist) = @_;
-  my $k = _process_label_attributes($self, $citekey, $dlist, [[$citekey,undef]], $labelattrs, $args->[0]);
+  my $k = _process_label_attributes($self, $citekey, $dlist, [[$citekey, undef]], $labelattrs, $args->[0]);
   return [$k, unescape_label($k)];
 }
 
@@ -446,7 +546,7 @@ sub _label_name {
       $useprefix = $names->get_useprefix;
     }
 
-    my $numnames  = $names->count_names;
+    my $numnames  = $names->count;
     my $visibility = $dlist->get_visible_alpha($names->get_id);
 
     # Use name range override, if any
@@ -1009,6 +1109,8 @@ my %internal_dispatch_sorting = (
                                  'editorbtype'     =>  [\&_sort_editort,       ['editorbtype']],
                                  'editorctype'     =>  [\&_sort_editort,       ['editorctype']],
                                  'citeorder'       =>  [\&_sort_citeorder,     []],
+                                 'citecount'       =>  [\&_sort_citecount,     []],
+                                 'intciteorder'    =>  [\&_sort_intciteorder,  []],
                                  'labelalpha'      =>  [\&_sort_labelalpha,    []],
                                  'labelname'       =>  [\&_sort_labelname,     []],
                                  'labeltitle'      =>  [\&_sort_labeltitle,    []],
@@ -1100,7 +1202,7 @@ sub _dispatch_sorting {
     $code_args_ref  = $d->[1];
   }
   else { # Unknown field
-    biber_warn("Unknown field '$sortfield' found in sorting template");
+    biber_warn("Field '$sortfield' in sorting template is not a sortable field");
     return undef;
   }
 
@@ -1203,15 +1305,22 @@ sub _sort_citeorder {
   my ($self, $citekey, $secnum, $section, $be, $dlist, $sortelementattributes) = @_;
   # Allkeys and sorting=none means use bib order which is in orig_order_citekeys
   # However, someone might do:
-  # \cite{b,a}
+  # \cite{b}\cite{a}
   # \nocite{*}
   # in the same section which means we need to use the order attribute for those
   # keys which have one (the \cited keys) and then an orig_order_citekey index based index
   # for the nocite ones.
   my $ko = Biber::Config->get_keyorder($secnum, $citekey);# only for \cited keys
   if ($section->is_allkeys) {
-    return $ko || (Biber::Config->get_keyorder_max($secnum) +
-                   (first_index {$_ eq $citekey} $section->get_orig_order_citekeys) + 1);
+    my $biborder = (Biber::Config->get_keyorder_max($secnum) +
+                    (first_index {$_ eq $citekey} $section->get_orig_order_citekeys) + 1);
+    my $allkeysorder = Biber::Config->get_keyorder($secnum, '*');
+    if (defined($ko) and defined($allkeysorder) and $allkeysorder < $ko) {
+      return $biborder;
+    }
+    else {
+      return $ko || $biborder;
+    }
   }
   # otherwise, we need to take account of citations with simulataneous order like
   # \cite{key1, key2} so this tied sorting order can be further sorted with other fields
@@ -1220,6 +1329,11 @@ sub _sort_citeorder {
   else {
     return $ko || '';
   }
+}
+
+sub _sort_citecount {
+  my ($self, $citekey, $secnum, $section, $be, $dlist, $sortelementattributes) = @_;
+  return $section->get_citecount($citekey) // '';
 }
 
 sub _sort_integer {
@@ -1235,7 +1349,7 @@ sub _sort_integer {
     }
 
     # Use Unicode::UCD::num() to map Unicode numbers to integers if possible
-    $field = num($field) //$field;
+    $field = num($field) // $field;
 
     return _process_sort_attributes($field, $sortelementattributes);
   }
@@ -1265,6 +1379,11 @@ sub _sort_entrykey {
 sub _sort_entrytype {
   my ($self, $citekey, $secnum, $section, $be, $dlist, $sortelementattributes) = @_;
   return _process_sort_attributes($be->get_field('entrytype'), $sortelementattributes);
+}
+
+sub _sort_intciteorder {
+  my ($self, $citekey, $secnum, $section, $be, $dlist, $sortelementattributes) = @_;
+  return Biber::Config->get_internal_keyorder($secnum, $citekey);
 }
 
 sub _sort_labelalpha {
@@ -1476,9 +1595,7 @@ sub _namestring {
   my $bee = $be->get_field('entrytype');
   my $names = $be->get_field($field);
   my $str = '';
-  my $count = $names->count_names;
-  # get visibility for sorting
-  my $visible = $dlist->get_visible_sort($names->get_id);
+  my $count = $names->count;
   my $useprefix = Biber::Config->getblxoption($secnum, 'useprefix', $bee, $citekey);
 
   # Get the sorting name key template for this list context
@@ -1490,17 +1607,26 @@ sub _namestring {
   # Override with any namelist scope sorting name key template option
   $snkname = $names->get_sortingnamekeytemplatename // $snkname;
 
+  # Get the sorting namekey template determined so far now that we are down to the name list
+  # scope since we need the visibility type now and this doesn't mean anything below the name list
+  # level anyway. We will select the final sorting namekey template below if there is an override
+  # at the individual name level
+  my $tmpsnk = Biber::Config->getblxoption(undef, 'sortingnamekeytemplate')->{$snkname};
+  # Now set visibility of the correct type. By default this is the standard
+  # sorting visibility but can be citation visibility as the biblatex
+  # "sortcites" option can require a different visibility for citations and
+  # so we have to generate a separate sorting list for this case
+  my $visible = $dlist->get_visible_sort($names->get_id);
+  if (defined($tmpsnk) and $tmpsnk->{visibility} eq 'cite') {
+    $visible = $dlist->get_visible_cite($names->get_id);
+  }
+
   # Name list scope useprefix option
   if (defined($names->get_useprefix)) {
     $useprefix = $names->get_useprefix;
   }
 
   my $trunc = "\x{10FFFD}";  # sort string for "et al" truncated name
-
-  # We strip nosort first otherwise normalise_string_sort damages diacritics
-  # We strip each individual component instead of the whole thing so we can use
-  # as name separators things which would otherwise be stripped. This way we
-  # guarantee that the separators are never in names
 
   foreach my $n ($names->first_n_names($visible)->@*) {
 
@@ -1510,6 +1636,9 @@ sub _namestring {
     }
 
     # Override with any name scope sorting name key template option
+    # This won't override the visibility type selection already taken from higher-level
+    # sorting namekey templates since this option only applies at name list level and higher
+    # anyway and this is individual name scope
     $snkname = $n->get_sortingnamekeytemplatename // $snkname;
 
     # Now get the actual sorting name key template
@@ -1517,7 +1646,7 @@ sub _namestring {
 
     # Get the sorting name key specification and use it to construct a sorting key for each name
     my $kpa = [];
-    foreach my $kp ($snk->@*) {
+    foreach my $kp ($snk->{template}->@*) {
       my $kps = '';
       for (my $i=0; $i<=$kp->$#*; $i++) {
         my $np = $kp->[$i];
@@ -1544,24 +1673,20 @@ sub _namestring {
 
                 # The namepart is padded to the longest namepart in the ref
                 # section as this is the only way to make sorting work
-                # properly The padding is spaces as this sorts before all
+                # properly. The padding is spaces as this sorts before all
                 # glyphs but it also of variable weight and ignorable in
                 # DUCET so we have to set U::C to variable=>'non-ignorable'
                 # as sorting default so that spaces are non-ignorable
                 $nps = normalise_string_sort(join('', $npistring->@*), $field);
 
-                # Only pad the last namepart
-                if ($i == $kp->$#*) {
-                  $nps = sprintf("%-*s", $section->get_np_length("${namepart}-i"), $nps);
-                }
+                # pad all nameparts
+                $nps = sprintf("%-*s", $section->get_np_length("${namepart}-i"), $nps);
               }
               else {
                 $nps = normalise_string_sort($npstring, $field);
 
-                # Only pad the last namepart
-                if ($i == $kp->$#*) {
-                  $nps = sprintf("%-*s", $section->get_np_length($namepart), $nps);
-                }
+                # pad all nameparts
+                $nps = sprintf("%-*s", $section->get_np_length($namepart), $nps);
               }
               $kps .= $nps;
             }
@@ -1620,6 +1745,10 @@ sub _liststring {
   }
 
   # separate the items by a string to give some structure
+  # We strip nosort first otherwise normalise_string_sort damages diacritics
+  # We strip each individual component instead of the whole thing so we can use
+  # as name separators things which would otherwise be stripped. This way we
+  # guarantee that the separators are never in names
   if ($verbatim) { # no normalisation for verbatim/uri fields
     $str = join($lsi, map { strip_nosort($_, $field)} @items);
   }
@@ -1671,7 +1800,7 @@ L<https://github.com/plk/biber/issues>.
 =head1 COPYRIGHT & LICENSE
 
 Copyright 2009-2012 François Charette and Philip Kime, all rights reserved.
-Copyright 2012-2020 Philip Kime, all rights reserved.
+Copyright 2012-2024 Philip Kime, all rights reserved.
 
 This module is free software.  You can redistribute it and/or
 modify it under the terms of the Artistic License 2.0.

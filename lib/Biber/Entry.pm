@@ -18,7 +18,7 @@ my $logger = Log::Log4perl::get_logger('main');
 
 =head1 NAME
 
-Biber::Entry
+Biber::Entry - Biber::Entry objects
 
 =head2 new
 
@@ -176,7 +176,7 @@ sub clone {
     $df =~ s/date$//;
     foreach my $dsf ('dateunspecified', 'datesplit', 'datejulian',
                      'enddatejulian', 'dateapproximate', 'enddateapproximate',
-                     'dateuncertain', 'enddateuncertain', 'season', 'endseason',
+                     'dateuncertain', 'enddateuncertain', 'yeardivision', 'yeardivision',
                      'era', 'endera') {
       if (my $ds = $self->{derivedfields}{"$df$dsf"}) {
         $new->{derivedfields}{"$df$dsf"} = $ds;
@@ -241,8 +241,9 @@ sub add_xdata_ref {
       my ($xe, $xf, $xfp) = $xdataref =~ m/^([^$xdatasep]+)$xdatasep([^$xdatasep]+)(?:$xdatasep(\d+))?$/x;
       unless ($xf) { # There must be a field in a granular XDATA ref
         my $entry_key = $self->get_field('citekey');
+        my $bee = $self->get_field('entrytype');
         my $secnum = $Biber::MASTER->get_current_section;
-        biber_warn("Entry '$entry_key' has XDATA reference from field '$reffield' that contains no source field (section $secnum)", $self);
+        biber_warn("$bee entry '$entry_key' has XDATA reference from field '$reffield' that contains no source field (section $secnum)", $self);
         return 0;
       }
       push $self->{xdatarefs}->@*, {# field pointing to XDATA
@@ -254,7 +255,7 @@ sub add_xdata_ref {
                                     # XDATA field
                                     xdatafield => $xf,
                                     # XDATA field position, 1-based
-                                    xdataposition => $xfp//1};
+                                    xdataposition => $xfp//'*'};
       return 1;
     }
     else {
@@ -531,8 +532,8 @@ sub field_exists {
 
 sub date_fields_exist {
   my ($self, $field) = @_;
-  my $t = $field =~ s/(?:end)?(?:year|month|day|hour|minute|second|season|timezone)$//r;
-  foreach my $dp ('year', 'month', 'day', 'hour', 'minute', 'second', 'season', 'timezone') {
+  my $t = $field =~ s/(?:end)?(?:year|month|day|hour|minute|second|yeardivision|timezone)$//r;
+  foreach my $dp ('year', 'month', 'day', 'hour', 'minute', 'second', 'yeardivision', 'timezone') {
     if (exists($self->{datafields}{"$t$dp"}) or exists($self->{datafields}{"${t}end$dp"})) {
       return 1;
     }
@@ -548,8 +549,8 @@ sub date_fields_exist {
 
 sub delete_date_fields {
   my ($self, $field) = @_;
-  my $t = $field =~ s/(?:end)?(?:year|month|day|hour|minute|second|season|timezone)$//r;
-  foreach my $dp ('year', 'month', 'day', 'hour', 'minute', 'second', 'season', 'timezone') {
+  my $t = $field =~ s/(?:end)?(?:year|month|day|hour|minute|second|yeardivision|timezone)$//r;
+  foreach my $dp ('year', 'month', 'day', 'hour', 'minute', 'second', 'yeardivision', 'timezone') {
     delete($self->{datafields}{"$t$dp"});
     delete($self->{datafields}{"${t}end$dp"});
   }
@@ -684,6 +685,9 @@ sub set_inherit_from {
     # is a low-level operation on datafields
     next if fc($field) eq fc('annotation');
 
+    # sets can have their own shorthands and it's not useful to inherit this anyway
+    next if fc($field) eq fc('shorthand');
+
     $self->set_datafield($field, $parent->get_field($field));
   }
 
@@ -712,6 +716,7 @@ sub resolve_xdata {
   my $secnum = $Biber::MASTER->get_current_section;
   my $section = $Biber::MASTER->sections->get_section($secnum);
   my $entry_key = $self->get_field('citekey');
+  my $bee = $self->get_field('entrytype');
   my $dm = Biber::Config->get_dm;
 
   # $xdata =
@@ -740,17 +745,15 @@ sub resolve_xdata {
   # ]
 
   foreach my $xdatum ($xdata->@*) {
-
     foreach my $xdref ($xdatum->{xdataentries}->@*) {
-
       unless (my $xdataentry = $section->bibentry($xdref)) {
-        biber_warn("Entry '$entry_key' references XDATA entry '$xdref' which does not exist, not resolving (section $secnum)", $self);
+        biber_warn("$bee entry '$entry_key' references XDATA entry '$xdref' which does not exist, not resolving (section $secnum)", $self);
         $xdatum->{resolved} = 0;
         next;
       }
       else {
         unless ($xdataentry->get_field('entrytype') eq 'xdata') {
-          biber_warn("Entry '$entry_key' references XDATA entry '$xdref' which is not an XDATA entry, not resolving (section $secnum)", $self);
+          biber_warn("$bee entry '$entry_key' references XDATA entry '$xdref' which is not an XDATA entry, not resolving (section $secnum)", $self);
           $xdatum->{resolved} = 0;
           next;
         }
@@ -768,6 +771,11 @@ sub resolve_xdata {
             foreach my $field ($xdataentry->datafields()) { # set fields
               next if $field eq 'ids'; # Never inherit aliases
               $self->set_datafield($field, $xdataentry->get_field($field));
+              # Inherit field annotations too
+              Biber::Annotation->inherit_annotations($xdataentry->get_field('citekey'),
+                                                     $self->get_field('citekey'),
+                                                     $field,
+                                                     $field);
 
               # Record graphing information if required
               if (Biber::Config->getoption('output_format') eq 'dot') {
@@ -788,50 +796,112 @@ sub resolve_xdata {
 
             unless ($reffielddm->{fieldtype} eq $xdatafielddm->{fieldtype} and
                     $reffielddm->{datatype} eq $xdatafielddm->{datatype}) {
-              biber_warn("Field '$reffield' in entry '$entry_key' which xdata references field '$xdatafield' in entry '$xdref' are not the same types, not resolving (section $secnum)", $self);
+              biber_warn("Field '$reffield' in $bee entry '$entry_key' which xdata references field '$xdatafield' in entry '$xdref' are not the same types, not resolving (section $secnum)", $self);
               $xdatum->{resolved} = 0;
               next;
             }
 
             unless ($xdataentry->get_field($xdatafield)) {
-              biber_warn("Field '$reffield' in entry '$entry_key' references XDATA field '$xdatafield' in entry '$xdref' and this field does not exist, not resolving (section $secnum)", $self);
+              biber_warn("Field '$reffield' in $bee entry '$entry_key' references XDATA field '$xdatafield' in entry '$xdref' and this field does not exist, not resolving (section $secnum)", $self);
               $xdatum->{resolved} = 0;
               next;
             }
 
             # Name lists
-            if ($dm->field_is_type('list', 'name', $reffield)){
+            if ($dm->field_is_type('list', 'name', $reffield)) {
+              if ($xdatum->{xdataposition} eq '*') { # insert all positions from XDATA field
+                $self->get_field($reffield)->splice($xdataentry->get_field($xdatafield), $refposition);
+                # Inherit annotations for the field and remap indices to new positions in target
+                for (my $i=1; $i<=$xdataentry->get_field($xdatafield)->count; $i++) {
+                  Biber::Annotation->inherit_annotations($xdataentry->get_field('citekey'),
+                                                         $self->get_field('citekey'),
+                                                         $xdatafield,
+                                                         $reffield,
+                                                         $i,
+                                                         $refposition+($i-1));
+                }
 
-              unless ($xdataentry->get_field($xdatafield)->is_nth_name($xdataposition)) {
-                biber_warn("Field '$reffield' in entry '$entry_key' references field '$xdatafield' position $xdataposition in entry '$xdref' and this position does not exist, not resolving (section $secnum)", $self);
-                $xdatum->{resolved} = 0;
-                next;
+                if ($logger->is_debug()) { # performance tune
+                  $logger->debug("Inserting at position $refposition in name field '$reffield' in entry '$entry_key' via XDATA");
+                }
               }
+              else {
+                unless ($xdataentry->get_field($xdatafield)->is_nth_name($xdataposition)) {
+                  biber_warn("Field '$reffield' in $bee entry '$entry_key' references field '$xdatafield' position $xdataposition in entry '$xdref' and this position does not exist, not resolving (section $secnum)", $self);
+                  $xdatum->{resolved} = 0;
+                  next;
+                }
+                $self->get_field($reffield)->
+                  replace_name($xdataentry->get_field($xdatafield)->nth_name($xdataposition), $refposition);
+                # Inherit annotations for the field and remap indices to new positions in target
+                Biber::Annotation->inherit_annotations($xdataentry->get_field('citekey'),
+                                                       $self->get_field('citekey'),
+                                                       $xdatafield,
+                                                       $reffield,
+                                                       $xdataposition,
+                                                       $refposition);
 
-              $self->get_field($reffield)->replace_name($xdataentry->get_field($xdatafield)->nth_name($xdataposition), $refposition);
-              if ($logger->is_debug()) { # performance tune
-                $logger->debug("Setting position $refposition in name field '$reffield' in entry '$entry_key' via XDATA");
+                if ($logger->is_debug()) { # performance tune
+                  $logger->debug("Setting position $refposition in name field '$reffield' in entry '$entry_key' via XDATA");
+                }
               }
             }
             # Non-name lists
             elsif ($dm->field_is_fieldtype('list', $reffield)) {
+              if ($xdatum->{xdataposition} eq '*') { # insert all positions from XDATA field
+                my $bibentries = $section->bibentries;
+                my $be = $bibentries->entry($xdatum->{xdataentries}[0]);
+                splice($self->get_field($reffield)->@*,
+                       $refposition-1,
+                       1,
+                       $be->get_field($xdatafield)->@*);
+                # Inherit annotations for the field and remap indices to new positions in target
+                for (my $i=1; $i<=scalar($xdataentry->get_field($xdatafield)->@*);$i++) {
+                  Biber::Annotation->inherit_annotations($xdataentry->get_field('citekey'),
+                                                              $self->get_field('citekey'),
+                                                              $xdatafield,
+                                                              $reffield,
+                                                              $i,
+                                                              $refposition+($i-1));
+                }
 
-              unless ($xdataentry->get_field($xdatafield)->[$xdataposition-1]) {
-                biber_warn("Field '$reffield' in entry '$entry_key' references field '$xdatafield' position $xdataposition in entry '$xdref' and this position does not exist, not resolving (section $secnum)", $self);
-                $xdatum->{resolved} = 0;
-                next;
+                if ($logger->is_debug()) { # performance tune
+                  $logger->debug("Inserting at position $refposition in list field '$reffield' in entry '$entry_key' via XDATA");
+                }
               }
+              else {
+                unless ($xdataentry->get_field($xdatafield)->[$xdataposition-1]) {
+                  biber_warn("Field '$reffield' in $bee entry '$entry_key' references field '$xdatafield' position $xdataposition in entry '$xdref' and this position does not exist, not resolving (section $secnum)", $self);
+                  $xdatum->{resolved} = 0;
+                  next;
+                }
+                $self->get_field($reffield)->[$refposition-1] =
+                  $xdataentry->get_field($xdatafield)->[$xdataposition-1];
 
-              $self->get_field($reffield)->[$refposition-1] =
-                $xdataentry->get_field($xdatafield)->[$refposition-1];
-              if ($logger->is_debug()) { # performance tune
-                $logger->debug("Setting position $refposition in list field '$reffield' in entry '$entry_key' via XDATA");
+                # Inherit annotations for the field and remap indices to new positions in target
+                Biber::Annotation->inherit_annotations($xdataentry->get_field('citekey'),
+                                                       $self->get_field('citekey'),
+                                                       $xdatafield,
+                                                       $reffield,
+                                                       $xdataposition,
+                                                       $refposition);
+
+                if ($logger->is_debug()) { # performance tune
+                  $logger->debug("Setting position $refposition in list field '$reffield' in entry '$entry_key' via XDATA");
+                }
               }
             }
             # Non-list
             else {
 
               $self->set_datafield($reffield, $xdataentry->get_field($xdatafield));
+
+              # Inherit annotations for the field and remap indices to new positions in target
+              Biber::Annotation->inherit_annotations($xdataentry->get_field('citekey'),
+                                                     $self->get_field('citekey'),
+                                                     $xdatafield,
+                                                     $reffield);
+
               if ($logger->is_debug()) { # performance tune
                 $logger->debug("Setting field '$reffield' in entry '$entry_key' via XDATA");
               }
@@ -882,7 +952,8 @@ sub inherit_from {
     biber_error("Circular inheritance between '$source_key'<->'$target_key'");
   }
 
-  my $type        = $self->get_field('entrytype');
+  my $bee         = $self->get_field('entrytype');
+  my $tbee         = $self->get_field('entrytype');
   my $parenttype  = $parent->get_field('entrytype');
   my $inheritance = Biber::Config->getblxoption(undef, 'inheritance');
   my %processed;
@@ -896,7 +967,7 @@ sub inherit_from {
   # override with type_pair specific defaults if they exist ...
   foreach my $type_pair ($defaults->{type_pair}->@*) {
     if (($type_pair->{source} eq '*' or $type_pair->{source} eq $parenttype) and
-        ($type_pair->{target} eq '*' or $type_pair->{target} eq $type)) {
+        ($type_pair->{target} eq '*' or $type_pair->{target} eq $bee)) {
       $inherit_all = $type_pair->{inherit_all} if $type_pair->{inherit_all};
       $override_target = $type_pair->{override_target} if $type_pair->{override_target};
       $dignore = $type_pair->{ignore} if defined($type_pair->{ignore});
@@ -908,7 +979,7 @@ sub inherit_from {
     # Match for this combination of entry and crossref parent?
     foreach my $type_pair ($inherit->{type_pair}->@*) {
       if (($type_pair->{source} eq '*' or $type_pair->{source} eq $parenttype) and
-          ($type_pair->{target} eq '*' or $type_pair->{target} eq $type)) {
+          ($type_pair->{target} eq '*' or $type_pair->{target} eq $bee)) {
         foreach my $field ($inherit->{field}->@*) {
           # Skip for fields in the per-entry noinerit datafield set
           if (my $niset = Biber::Config->getblxoption($secnum, 'noinherit', undef, $target_key) and
@@ -929,7 +1000,7 @@ sub inherit_from {
           elsif (not $self->field_exists($field->{target}) or
                  $field_override_target eq 'true') {
             if ($logger->is_debug()) {# performance tune
-              $logger->debug("Entry '$target_key' is inheriting field '" .
+              $logger->debug("$bee entry '$target_key' is inheriting field '" .
                              $field->{source}.
                              "' as '" .
                              $field->{target} .
@@ -937,6 +1008,10 @@ sub inherit_from {
             }
 
             $self->set_datafield($field->{target}, $parent->get_field($field->{source}));
+            Biber::Annotation->inherit_annotations($source_key,
+                                                   $target_key,
+                                                   $field->{source},
+                                                   $field->{target});
 
             # Ignore uniqueness information tracking for this inheritance?
             my $ignore = $inherit->{ignore} || $dignore;
@@ -996,7 +1071,7 @@ sub inherit_from {
       next if first {$_ eq $datefield} @removed_fields;
       foreach my $dsf ('dateunspecified', 'datesplit', 'datejulian',
                        'enddatejulian', 'dateapproximate', 'enddateapproximate',
-                       'dateuncertain', 'enddateuncertain', 'season', 'endseason',
+                       'dateuncertain', 'enddateuncertain', 'yeardivision', 'endyeardivision',
                        'era', 'endera') {
         if (my $ds = $parent->{derivedfields}{"$df$dsf"}) {
           # Set unless the child has the *date datepart, otherwise you can
@@ -1018,10 +1093,14 @@ sub inherit_from {
       # Set the field if it doesn't exist or override is requested
       if (not $self->field_exists($field) or $override_target eq 'true') {
         if ($logger->is_debug()) { # performance tune
-          $logger->debug("Entry '$target_key' is inheriting field '$field' from entry '$source_key'");
+          $logger->debug("$tbee entry '$target_key' is inheriting field '$field' from $bee entry '$source_key'");
         }
 
         $self->set_datafield($field, $parent->get_field($field));
+        Biber::Annotation->inherit_annotations($source_key,
+                                               $target_key,
+                                               $field,
+                                               $field);
 
         # Ignore uniqueness information tracking for this inheritance?
         Biber::Config->add_uniq_ignore($target_key, $field, $dignore);
@@ -1072,7 +1151,7 @@ L<https://github.com/plk/biber/issues>.
 =head1 COPYRIGHT & LICENSE
 
 Copyright 2009-2012 François Charette and Philip Kime, all rights reserved.
-Copyright 2012-2020 Philip Kime, all rights reserved.
+Copyright 2012-2024 Philip Kime, all rights reserved.
 
 This module is free software.  You can redistribute it and/or
 modify it under the terms of the Artistic License 2.0.

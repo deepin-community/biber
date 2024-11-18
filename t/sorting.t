@@ -78,7 +78,7 @@ my $prefix1     = 'mm,,Luzzatto     Moshe Ḥayyim  ,,,Lashon la-Ramḥal: u-vo 
 my $diacritic1  = 'mm,,Hasan        Alī           ,al-Hasan     ʿAlī          ,Hasan        Alī           ,Some title,2000,';
 my $labels      = '2005,3,2';
 my $sn1         = '';
-my $snk1        = 'mm,,John John           vonDoe          Jr,,,0';
+my $snk1        = 'mm,,John            John           vonDoe          Jr,,,0';
 my $ent1        = 'mm,,Smith        Brian          ,,,0';
 my $others1     = 'mm,,Gauck        Joachim        ,,Title A,0';
 my $others2     = 'mm,,Gauck        Joachim        ,,Title B,0';
@@ -100,7 +100,7 @@ my $ssd1 = [
   { spec => "str", str => 1 },
   { spec => "str", str => 1 },
   { spec => "str", str => 1 },
-  { spec => "str", str => 1 },
+  { spec => "int", int => 1 },
   { spec => "str", str => 1 },
   { spec => "int", int => 1 },
 ];
@@ -137,7 +137,7 @@ Biber::Config->setblxoption(undef,'useprefix', 1);
 $biber->prepare;
 my $section = $biber->sections->get_section(0);
 my $bibentries = $section->bibentries;
-my $main = $biber->datalists->get_list('nyt/global//global/global');
+my $main = $biber->datalists->get_list('nyt/global//global/global/global');
 
 eq_or_diff($main->get_sortdata_for_key('tvonb')->[0], $useprefix1, 'von with type-specific presort, exclusions and useprefix=true' );
 eq_or_diff($main->get_sortdata_for_key('avona')->[0], $useprefix2, 'von with name list scope useprefix' );
@@ -155,7 +155,7 @@ eq_or_diff($main->get_sortdata_for_key('final')->[0], $final, 'Final entries wit
 
 # Testing custom name sorting key
 my $SNK = Biber::Config->getblxoption(undef,'sortingnamekeytemplate');
-$SNK->{global} = [
+$SNK->{global} = {visibility => 'sort', template => [
         [{ type => 'namepart', value => 'given' },
          { type => 'literal', value => ' ' },
          { type => 'namepart', value => 'given' }],
@@ -163,7 +163,7 @@ $SNK->{global} = [
         [{ type => 'namepart', value => 'family'}],
         [{ type => 'namepart', value => 'suffix'}],
         [{ type => 'namepart', value => 'prefix', use => 0}]
-       ];
+       ]};
 Biber::Config->setblxoption(undef,'sortingnamekeytemplate', $SNK);
 $biber->prepare;
 eq_or_diff($main->get_sortdata_for_key('snk1')->[0], $snk1, 'Sorting name key - 1' );
@@ -172,13 +172,13 @@ eq_or_diff($main->get_sortdata_for_key('ent1')->[0], $ent1, 'Sorting name key - 
 # regenerate information
 Biber::Config->setblxoption(undef,'useprefix', 0);
 # Default name sorting key back again
-$SNK->{global} = [
+$SNK->{global} = {visibility => 'sort', template => [
         [{ type => 'namepart', value => 'prefix', use => 1}],
         [{ type => 'namepart', value => 'family'}],
         [{ type => 'namepart', value => 'given' }],
         [{ type => 'namepart', value => 'suffix'}],
         [{ type => 'namepart', value => 'prefix', use => 0}]
-       ];
+       ]};
 Biber::Config->setblxoption(undef,'sortingnamekeytemplate', $SNK);
 $biber->prepare;
 
@@ -480,13 +480,13 @@ eq_or_diff($main->get_sortdata_for_key('stdmodel')->[0], $ydnt, 'basic ydnt sort
 
 
 $SNK = Biber::Config->getblxoption(undef,'sortingnamekey');
-$SNK->{global} = [
+$SNK->{global} = {visibility => 'sort', template => [
         [{ type => 'namepart', value => 'prefix', use => 1}],
         [{ type => 'namepart', value => 'family'}],
         [{ type => 'namepart', value => 'given', inits => 1}],
         [{ type => 'namepart', value => 'suffix'}],
         [{ type => 'namepart', value => 'prefix', use => 0}]
-       ];
+       ]};
 Biber::Config->setblxoption(undef,'sortingnamekeytemplate', $SNK);
 
 $biber->prepare;
@@ -494,13 +494,13 @@ eq_or_diff($main->get_sortdata_for_key('stdmodel')->[0], $sortinits, 'sort first
 
 $SNK = Biber::Config->getblxoption(undef,'sortingnamekey');
 # Default back again
-$SNK->{global} = [
+$SNK->{global} = {visibility => 'sort', template => [
         [{ type => 'namepart', value => 'prefix', use => 1}],
         [{ type => 'namepart', value => 'family'}],
         [{ type => 'namepart', value => 'given'}],
         [{ type => 'namepart', value => 'suffix'}],
         [{ type => 'namepart', value => 'prefix', use => 0}]
-       ];
+       ]};
 Biber::Config->setblxoption(undef,'sortingnamekeytemplate', $SNK);
 
 Biber::Config->setblxoption(undef,'labelalpha', 0);

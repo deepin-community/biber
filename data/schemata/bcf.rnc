@@ -27,6 +27,7 @@ start =
       attribute component { "biblatex" },
       attribute type { "global" },
       alphaothers,
+      extradatecontext,
       labelalpha,
       labelnamespec,
       labeltitle,
@@ -49,6 +50,7 @@ start =
       nohashothers,
       noroman,
       nosortothers,
+      pluralothers,
       singletitle,
       skipbib,
       skipbiblist,
@@ -72,6 +74,7 @@ start =
       attribute component { "biblatex" },
       attribute type { text },
       alphaothers?,
+      extradatecontext?,
       labelalpha?,
       labelnamespec?,
       labeltitle?,
@@ -100,6 +103,7 @@ start =
       sortalphaothers?,
       uniquelist?,
       uniquename?,
+      uniqueprimaryauthor?,
       uniquetitle?,
       uniquebaretitle?,
       uniquework?,
@@ -261,10 +265,20 @@ start =
         empty
       }+
     }?,
+    # nonamestring specification
+    element bcf:nonamestrings {
+      element bcf:nonamestring {
+        attribute field { xsd:string },
+        attribute value { xsd:string },
+        empty
+      }+
+    }?,
     # Transliteration specification(s)
     translit*,
     # Uniquename template
     uniquenametemplate+,
+    # Name hash template
+    namehashtemplate+,
     # Sorting name key specification
     sortingnamekeytemplate+,
     # presort default strings for different entry types
@@ -385,7 +399,7 @@ start =
                 )+
               )
             )
-          }*
+          }+
         }+
       }?,
       # Section specifications
@@ -402,7 +416,8 @@ listspec =
       attribute sortingnamekeytemplatename { xsd:string {minLength="1"} },
       attribute labelprefix { xsd:string },
       attribute uniquenametemplatename { xsd:string },
-      attribute labelalphanametemplatename { xsd:string },      
+      attribute labelalphanametemplatename { xsd:string },
+      attribute namehashtemplatename { xsd:string },
       # name is only needed for list types
       attribute name { xsd:string {minLength="1"} },
       (filter | filteror )*
@@ -423,7 +438,7 @@ uniquenametemplate =
   element bcf:uniquenametemplate {
     attribute name { xsd:string {minLength="1"} },
     element bcf:namepart {
-     attribute order { xsd:integer },
+      attribute order { xsd:integer },
       attribute use { xsd:boolean }?,
       attribute base { xsd:boolean }?,
       attribute disambiguation { "none" | "init" | "initorfull" | "full"}?,
@@ -431,9 +446,20 @@ uniquenametemplate =
     }+
   }
 
+namehashtemplate = 
+  element bcf:namehashtemplate {
+    attribute name { xsd:string {minLength="1"} },
+    element bcf:namepart {
+      attribute order { xsd:integer },
+      attribute hashscope { "init" | "full" },
+      text
+    }+
+  }
+
 sortingnamekeytemplate = 
   element bcf:sortingnamekeytemplate {
     attribute name { text },
+    attribute visibility { text },
     element bcf:keypart {
      attribute order { xsd:integer },
      element bcf:part {
@@ -496,6 +522,8 @@ secspec =
     element bcf:datasource {
       attribute type { "file" },
       attribute datatype { "bibtex" | "biblatexml" }?,
+      attribute encoding { text }?,
+      attribute glob { "true" | "false" }?,
       xsd:anyURI
     }*
   }?,
@@ -507,8 +535,13 @@ secspec =
         attribute members { xsd:string {minLength="1"}},
         xsd:string {minLength="1"}) |
       ( attribute order { xsd:integer },
+        attribute intorder { xsd:integer }?,
         attribute nocite { xsd:boolean }?,
         xsd:string {minLength="1"} )
+    }*,
+    element bcf:citekeycount {
+      attribute count { xsd:integer },
+      xsd:string {minLength="1"}
     }*
   }
 
@@ -524,6 +557,15 @@ filter = element bcf:filter {
 
 # option definitions
 # use<name> options are dynamically determined from data model
+extradatecontext =
+  element bcf:option {
+    attribute type { "multivalued" },
+    element bcf:key { "extradatecontext" },
+    element bcf:value {
+      attribute order { xsd:integer },
+      text
+    }+
+  }
 usenames =
   element bcf:option {
     attribute type { "singlevalued" },
@@ -554,7 +596,6 @@ labeltitlespec =
     element bcf:key { "labeltitlespec" },
     element bcf:value {
       attribute order { xsd:integer },
-      attribute lang { text }?,
       text
     }+
   }
@@ -642,13 +683,21 @@ nosortothers =
 # full (true) = disambiguate with full name or initials, only up to maxcitenames/uniquelist
 # allinit = disambiguate with initials, ignore maxcitenames/uniquelist
 # allfull = disambiguate with full name or initials, ignore maxcitenames/uniquelist
-# mininit = disambiguate with initials, only between identical lists in different entries
-# minfull = disambiguate with full name or initials, only between identical lists in different entries
+# mininit = disambiguate with initials, only between identical lists of base names in different entries
+# minfull = disambiguate with full name or initials, only between identical lists of base names in different entries
+# minyearinit = disambiguate with initials, only between identical lists of base names and years in different entries
+# minyearfull = disambiguate with full name or initials, only between identical lists of base names and years in different entries
+pluralothers =
+  element bcf:option {
+    attribute type { "singlevalued" },
+    element bcf:key { "pluralothers" },
+    element bcf:value { xsd:boolean }
+  }
 uniquename =
   element bcf:option {
     attribute type { "singlevalued" },
     element bcf:key { "uniquename" },
-    element bcf:value { "false" | "init" | "full" | "allinit" | "allfull" | "mininit" | "minfull" }
+    element bcf:value { "false" | "init" | "full" | "allinit" | "allfull" | "mininit" | "minfull" | "minyearinit" | "minyearfull" }
   }
 uniqueprimaryauthor =
   element bcf:option {
@@ -770,7 +819,6 @@ labelnamespec =
     element bcf:key { "labelnamespec" },
     element bcf:value {
       attribute order { xsd:integer },
-      attribute lang { text }?,
       text
     }+
   }
@@ -871,6 +919,8 @@ map =
           attribute map_appendstrict { "1" }?,
           attribute map_final { "1" }?,
           attribute map_match { xsd:string {minLength="1"} }?,
+          attribute map_matches { xsd:string {minLength="1"} }?,
+          attribute map_matchesi { xsd:string {minLength="1"} }?,
           attribute map_matchi { xsd:string {minLength="1"} }?,
           attribute map_notmatch { xsd:string {minLength="1"} }?,
           attribute map_notmatchi { xsd:string {minLength="1"} }?,
@@ -890,7 +940,7 @@ dmfieldtype =  "field" | "list"
 dmdatatype =  "literal" | "name" | "key" | "entrykey" | "date" | "verbatim" | "integer" | "range" | "code" | "uri" | "datepart" | "keyword" | "option"
 
 # Copyright 2009-2012 François Charette and Philip Kime, all rights reserved.
-# Copyright 2012-2020 Philip Kime, all rights reserved.
+# Copyright 2012-2024 Philip Kime, all rights reserved.
 
 # This code is free software.  You can redistribute it and/or
 # modify it under the terms of the Artistic License 2.0.

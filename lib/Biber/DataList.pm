@@ -13,7 +13,7 @@ use List::Util qw( first );
 
 =head1 NAME
 
-Biber::DataList
+Biber::DataList - Biber::DataList objects
 
 =head2 new
 
@@ -128,8 +128,6 @@ sub set_entryfield {
   return;
 }
 
-
-
 =head2 add_uniquenamecount
 
     Add a name to the list of name contexts which have the name in it
@@ -188,29 +186,32 @@ sub add_uniquelistcount {
 =cut
 
 sub add_uniquelistcount_final {
-  my ($self, $namelist) = @_;
+  my ($self, $namelist, $labelyear) = @_;
   $self->{state}{uniquelistcount}{global}{final}{join("\x{10FFFD}", $namelist->@*)}++;
+  if ($labelyear) { # uniquelist=minyear
+    $self->{state}{uniquelistcount}{global}{final}{$labelyear}{join("\x{10FFFD}", $namelist->@*)}++;
+  }
   return;
 }
 
 
 =head2 add_uniquelistcount_minyear
 
-    Increment the count for a list and year to the data for a name
+    Increment the count for a list and year for a name
     Used to track uniquelist = minyear
 
 =cut
 
 sub add_uniquelistcount_minyear {
   my ($self, $minyearnamelist, $year, $namelist) = @_;
-  # Allow year a default in case labelname is undef
+  # Allow year a default in case labelyear is undef
   $self->{state}{uniquelistcount}{minyear}{join("\x{10FFFD}", $minyearnamelist->@*)}{$year // '0'}{join("\x{10FFFD}", $namelist->@*)}++;
   return;
 }
 
 =head2 get_uniquelistcount_minyear
 
-    Get the count for a list and year to the data for a name
+    Get the count for a list and year for a name
     Used to track uniquelist = minyear
 
 =cut
@@ -568,10 +569,12 @@ sub get_uniquelist {
 =cut
 
 sub set_uniquelist {
-  my ($self, $nl, $namelist, $maxcn, $mincn) = @_;
+  # $nl is the namelist object
+  # $namelist is the extracted string concatenation from $nl which forms the tracking key
+  my ($self, $nl, $namelist, $labelyear, $ul, $maxcn, $mincn) = @_;
   my $nlid = $nl->get_id;
   my $uniquelist = $self->count_uniquelist($namelist);
-  my $num_names = $nl->count_names;
+  my $num_names = $nl->count;
   my $currval = $self->{state}{namelistdata}{$nlid}{ul};
 
   # Set modified flag to positive if we changed something
@@ -617,7 +620,7 @@ sub set_uniquelist {
   # this is an elsif because for final count > 1, we are setting uniquelist and don't
   # want to mess about with it any more
   elsif ($num_names > $uniquelist and
-         not $self->namelist_differs_nth($namelist, $uniquelist)) {
+         not $self->namelist_differs_nth($namelist, $uniquelist, $ul, $labelyear)) {
     # If there are more names than uniquelist, reduce it by one unless
     # there is another list which differs at uniquelist and is at least as long
     # so we get:
@@ -796,7 +799,7 @@ sub reset_seen_extra {
   $self->{state}{seen_extratitle} = {};
   $self->{state}{seen_extratitleyear} = {};
   $self->{state}{seen_extraalpha} = {};
-  $self->{state}{seen_namedateparts} = {};
+  $self->{state}{seen_nametitledateparts} = {};
   $self->{state}{seen_labelname} = {};
   $self->{state}{seen_nametitle} = {};
   $self->{state}{seen_titleyear} = {};
@@ -871,7 +874,7 @@ sub incr_seen_extraalpha {
 }
 
 
-=head2 get_seen_namedateparts
+=head2 get_seen_nametitledateparts
 
     Get the count of an labelname/dateparts combination for tracking
     extradate. It uses labelyear plus name as we need to disambiguate
@@ -880,37 +883,37 @@ sub incr_seen_extraalpha {
 
 =cut
 
-sub get_seen_namedateparts {
+sub get_seen_nametitledateparts {
   my ($self, $ny) = @_;
-  return $self->{state}{seen_namedateparts}{$ny} // 0;
+  return $self->{state}{seen_nametitledateparts}{$ny} // 0;
 }
 
-=head2 incr_seen_namedateparts
+=head2 incr_seen_nametitledateparts
 
-    Increment the count of an labelname/dateparts combination for extradate
+    Increment the count of an labelname/labeltitle+dateparts combination for extradate
 
-    We pass in the name and date strings separately as we have to
+    We pass in the name/title and date strings separately as we have to
     be careful and only increment this counter beyond 1 if there is
-    a name component. Otherwise, extradate gets defined for all
-    entries with no name but the same year etc.
+    a name/title component. Otherwise, extradate gets defined for all
+    entries with no name/title but the same year etc.
 
 =cut
 
-sub incr_seen_namedateparts {
+sub incr_seen_nametitledateparts {
   my ($self, $ns, $ys) = @_;
   my $tmp = "$ns,$ys";
   # We can always increment this to 1
-  unless (exists($self->{state}{seen_namedateparts}{$tmp})) {
-    $self->{state}{seen_namedateparts}{$tmp}++;
+  unless (exists($self->{state}{seen_nametitledateparts}{$tmp})) {
+    $self->{state}{seen_nametitledateparts}{$tmp}++;
   }
-  # But beyond that only if we have a labelname in the entry since
+  # But beyond that only if we have a labelname/labeltitle in the entry since
   # this counter is used to create extradate which doesn't mean anything for
-  # entries with no name
+  # entries with no name or title
   # We allow empty year so that we generate extradate for the same name with no year
   # so we can do things like "n.d.-a", "n.d.-b" etc.
   else {
     if ($ns) {
-      $self->{state}{seen_namedateparts}{$tmp}++;
+      $self->{state}{seen_nametitledateparts}{$tmp}++;
     }
   }
   return;
@@ -1173,7 +1176,8 @@ sub get_attrs {
                     $self->{sortingnamekeytemplatename},
                     $self->{labelprefix},
                     $self->{uniquenametemplatename},
-                    $self->{labelalphanametemplatename}));
+                    $self->{labelalphanametemplatename},
+                    $self->{namehashtemplatename}));
 }
 
 =head2 get_sortingtemplatename
@@ -1258,6 +1262,31 @@ sub get_labelalphanametemplatename {
   my $self = shift;
   return $self->{labelalphanametemplatename};
 }
+
+=head2 set_namehashtemplatename
+
+    Sets the namehashtemplate name of a data list
+
+=cut
+
+sub set_namehashtemplatename {
+  my $self = shift;
+  my $nhtn = shift;
+  $self->{namehashtemplatename} = lc($nhtn);
+  return;
+}
+
+=head2 get_namehashtemplatename
+
+    Gets the namehashtemplate name of a data list
+
+=cut
+
+sub get_namehashtemplatename {
+  my $self = shift;
+  return $self->{namehashtemplatename};
+}
+
 
 =head2 set_sortinit_collator
 
@@ -1907,8 +1936,32 @@ sub instantiate_entry {
       if (my $e = $self->get_entryfield($key, "${namefield}namehash")) {
         my $str = "\\strng{${namefield}namehash}{$e}";
         $entry_string =~ s|<BDS>${namefield}NAMEHASH</BDS>|$str|gxms;
-
       }
+
+      # per-namelist fullhash
+      if (my $e = $self->get_entryfield($key, "${namefield}fullhash")) {
+        my $str = "\\strng{${namefield}fullhash}{$e}";
+        $entry_string =~ s|<BDS>${namefield}FULLHASH</BDS>|$str|gxms;
+      }
+
+      # per-namelist fullhashraw
+      if (my $e = $self->get_entryfield($key, "${namefield}fullhashraw")) {
+        my $str = "\\strng{${namefield}fullhashraw}{$e}";
+        $entry_string =~ s|<BDS>${namefield}FULLHASHRAW</BDS>|$str|gxms;
+      }
+
+    }
+
+    # fullhash
+    if (my $e = $self->get_entryfield($key, 'fullhash')) {
+      my $str = "\\strng{fullhash}{$e}";
+      $entry_string =~ s|<BDS>FULLHASH</BDS>|$str|gxms;
+    }
+
+    # fullhashraw
+    if (my $e = $self->get_entryfield($key, 'fullhashraw')) {
+      my $str = "\\strng{fullhashraw}{$e}";
+      $entry_string =~ s|<BDS>FULLHASHRAW</BDS>|$str|gxms;
     }
 
     # bibnamehash
@@ -2244,13 +2297,21 @@ sub namelist_differs_index {
 
 sub namelist_differs_nth {
   my $self = shift;
-  my ($list, $n) = @_;
+  my ($list, $n, $ul, $labelyear) = @_;
   my @list_one = $list->@*;
   # Loop over all final lists, looking for ones which match:
   # * up to n - 1
   # * differ at $n
   # * are at least as long
-  foreach my $l_s (keys $self->{state}{uniquelistcount}{global}{final}->%*) {
+
+  # uniquelist=minyear should only disambiguate from entries with the
+  # same labelyear
+  my $unames = $self->{state}{uniquelistcount}{global}{final};
+  if ($ul eq 'minyear') {
+    $unames = $self->{state}{uniquelistcount}{global}{final}{$labelyear};
+  }
+
+  foreach my $l_s (keys $unames->%*) {
     my @l = split("\x{10FFFD}", $l_s);
     # If list is shorter than the list we are checking, it's irrelevant
     next if $#l < $list->$#*;
@@ -2278,7 +2339,7 @@ L<https://github.com/plk/biber/issues>.
 
 =head1 COPYRIGHT & LICENSE
 
-Copyright 2012-2020 Philip Kime, all rights reserved.
+Copyright 2012-2024 Philip Kime, all rights reserved.
 
 This module is free software.  You can redistribute it and/or
 modify it under the terms of the Artistic License 2.0.

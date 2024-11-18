@@ -23,6 +23,7 @@ use Regexp::Common qw( balanced );
 use List::AllUtils qw( first );
 use Log::Log4perl qw(:no_extra_logdie_message);
 use Scalar::Util qw(looks_like_number);
+use Text::Balanced qw(extract_bracketed);
 use Text::CSV;
 use Text::Roman qw(isroman roman2int);
 use Unicode::Normalize;
@@ -47,14 +48,14 @@ our @EXPORT = qw{ check_empty check_exists slurp_switchr slurp_switchw
   glob_data_file locate_data_file makenamesid makenameid stringify_hash
   normalise_string normalise_string_hash normalise_string_underscore
   normalise_string_sort normalise_string_label reduce_array remove_outer
-  has_outer add_outer ucinit strip_nosort strip_noinit is_def is_undef
-  is_def_and_notnull is_def_and_null is_undef_or_null is_notnull is_null
-  normalise_utf8 inits join_name latex_recode_output filter_entry_options
-  biber_error biber_warn ireplace imatch validate_biber_xml
-  process_entry_options escape_label unescape_label biber_decode_utf8 out
-  parse_date_start parse_date_end parse_date_range locale2bcp47
-  bcp472locale rangelen match_indices process_comment map_boolean
-  parse_range parse_range_alt maploopreplace get_transliterator
+  has_outer add_outer ucinit strip_nosort strip_nonamestring strip_noinit
+  is_def is_undef is_def_and_notnull is_def_and_null is_undef_or_null
+  is_notnull is_null normalise_utf8 inits join_name latex_recode_output
+  filter_entry_options biber_error biber_warn ireplace imatch
+  validate_biber_xml process_entry_options escape_label unescape_label
+  biber_decode_utf8 out parse_date_start parse_date_end parse_date_range
+  locale2bcp47 bcp472locale rangelen match_indices process_comment
+  map_boolean parse_range parse_range_alt maploopreplace get_transliterator
   call_transliterator normalise_string_bblxml gen_initials join_name_parts
   split_xsv date_monthday tzformat expand_option_input strip_annotation
   appendstrict_check merge_entry_options process_backendin xdatarefout
@@ -384,17 +385,15 @@ sub check_exists {
 
 =head2 biber_warn
 
-    Wrapper around various warnings bits and pieces
-    Logs a warning, add warning to the list of .bbl warnings and optionally
-    increments warning count in Biber object, if present
+    Wrapper around various warnings bits and pieces.
+    Add warning to the list of .bbl warnings and the master list of warnings
 
 =cut
 
 sub biber_warn {
   my ($warning, $entry) = @_;
-  $logger->warn($warning);
   $entry->add_warning($warning) if $entry;
-  $Biber::MASTER->{warnings}++;
+  push $Biber::MASTER->{warnings}->@*, $warning;
   return;
 }
 
@@ -516,6 +515,46 @@ sub strip_nosort {
   return $string;
 }
 
+=head2 strip_nonamestring
+
+  Removes elements which are not to be used in certain name-related operations like:
+
+  * fullhash generation
+  * uniquename generation
+
+ from a name
+
+=cut
+
+sub strip_nonamestring {
+  no autovivification;
+  my ($string, $fieldname) = @_;
+  return '' unless $string; # Sanitise missing data
+  return $string unless my $nonamestring = Biber::Config->getoption('nonamestring');
+
+  my $restrings;
+
+  foreach my $nnopt ($nonamestring->@*) {
+    # Specific fieldnames override sets
+    if (fc($nnopt->{name}) eq fc($fieldname)) {
+      push $restrings->@*, $nnopt->{value};
+    }
+        elsif (my $set = $DATAFIELD_SETS{lc($nnopt->{name})} ) {
+      if (first {fc($_) eq fc($fieldname)} $set->@*) {
+        push $restrings->@*, $nnopt->{value};
+      }
+    }
+  }
+
+  # If no nonamestring to do, just return string
+  return $string unless $restrings;
+
+  foreach my $re ($restrings->@*) {
+    $string =~ s/$re//gxms;
+  }
+  return $string;
+}
+
 =head2 normalise_string_label
 
 Remove some things from a string for label generation. Don't strip \p{Dash}
@@ -629,7 +668,7 @@ sub normalise_string_hash {
   return '' unless $str; # Sanitise missing data
   $str =~ s/\\(\p{L}+)\s*/$1:/g; # remove tex macros
   $str =~ s/\\([^\p{L}])\s*/ord($1).':'/ge; # remove accent macros like \"a
-  $str =~ s/[\{\}~\.\s]+//g; # Remove brackes, ties, dots, spaces
+  $str =~ s/[\{\}~\.\s]+//g; # Remove braces, ties, dots, spaces
   return $str;
 }
 
@@ -713,7 +752,10 @@ sub reduce_array {
 
 sub remove_outer {
   my $str = shift;
-  return (0, $str) if $str =~ m/}\s*{/;
+  my @check = extract_bracketed($str, '{}');
+  if (not defined($check[0]) or $check[0] ne $str) {# Not balanced outer braces, ignore
+    return (0, $str);
+  }
   my $r = $str =~ s/^{(\X+)}$/$1/;
   return (($r ? 1 : 0), $str);
 }
@@ -767,7 +809,7 @@ sub ucinit {
 
     defined($thing->method($arg)->method)
 
-    wheras:
+    whereas:
 
     is_undef($thing->method($arg)->method)
 
@@ -1151,10 +1193,11 @@ sub validate_biber_xml {
 
 sub map_boolean {
   my ($bn, $bv, $dir) = @_;
-  my $b = lc($bv);
   # Ignore non-booleans
   return $bv unless exists($CONFIG_OPTTYPE_BIBLATEX{$bn});
   return $bv unless $CONFIG_OPTTYPE_BIBLATEX{$bn} eq 'boolean';
+
+  my $b = lc($bv);
 
   my %map = (true  => 1,
              false => 0,
@@ -1390,7 +1433,7 @@ sub parse_date_end {
 
 =head2 parse_date
 
-  Parse of EDTF dates
+  Parse of iso8601-2 dates
 
 =cut
 
@@ -1894,7 +1937,7 @@ L<https://github.com/plk/biber/issues>.
 
 =head1 COPYRIGHT & LICENSE
 
-Copyright 2012-2020 Philip Kime, all rights reserved.
+Copyright 2012-2024 Philip Kime, all rights reserved.
 
 This module is free software.  You can redistribute it and/or
 modify it under the terms of the Artistic License 2.0.

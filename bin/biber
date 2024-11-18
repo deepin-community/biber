@@ -122,7 +122,7 @@ GetOptions(
            'validate_datamodel|validate-datamodel|V',
            'version|v',
            'winunicode|W',
-           'wraplines|w',
+           'wraplines|w:80',
            'xdatamarker=s',
            'xdatasep=s',
            'xnamesep=s',
@@ -240,12 +240,12 @@ if ($opts->{output_macro_fields}) {
 
 # Check the output_format option
 if (my $of = $opts->{output_format}) {
-  unless ($opts->{output_format} =~ /\A(?:bbl|dot|bibtex|biblatexml|bblxml)\z/xms) {
-    say STDERR "Biber: Unknown output format '$of', must be one of 'bbl', 'dot', 'bibtex', 'biblatexml', 'bblxml'";
+  unless ($opts->{output_format} =~ /\A(?:bbl|dot|bibtex|biblatexml|bblxml|bibjson)\z/xms) {
+    say STDERR "Biber: Unknown output format '$of', must be one of 'bbl', 'dot', 'bibtex', 'biblatexml', 'bblxml', 'bibjson'";
     exit EXIT_ERROR;
   }
-  if ($opts->{output_format} eq 'bblxml') {
-    say STDERR "Biber: Deprecated output format 'bblxml' - this will be removed in a future version";
+  if ($opts->{output_format} eq 'bblxml' or $opts->{output_format} eq 'dot') {
+    say STDERR "Biber: Deprecated output format '" . $opts->{output_format} . "' - this will be removed in a future version";
   }
 }
 
@@ -263,8 +263,8 @@ if (exists($opts->{tool}) and
 # Check output-format value
 if (exists($opts->{tool}) and
     exists($opts->{output_format}) and
-    $opts->{output_format} !~ /\A(?:bibtex|biblatexml)\z/xms) {
-    say STDERR "Biber: Output format in tool mode must be one of 'bibtex' or 'biblatexml'";
+    $opts->{output_format} !~ /\A(?:bibtex|biblatexml|bibjson)\z/xms) {
+    say STDERR "Biber: Output format in tool mode must be one of 'bibtex', 'biblatexml' or 'bibjson'";
     exit EXIT_ERROR;
 }
 
@@ -285,7 +285,7 @@ if (exists($opts->{isbn10}) and exists($opts->{isbn13})) {
 }
 
 # Check the tool_* options
-if (exists($opts->{output_indent}) and $opts->{output_indent} !~ /^\d+$/) {
+if (exists($opts->{output_indent}) and $opts->{output_indent} !~ /^\d+t?$/) {
   say STDERR "Biber: Invalid non-numeric argument for 'output_indent' option!";
   exit EXIT_ERROR;
 }
@@ -347,10 +347,13 @@ if (Biber::Config->getoption('output_file')) {
 else {
   if (Biber::Config->getoption('tool')) {
     if (Biber::Config->getoption('output_format') eq 'bibtex') { # tool .bib output
-      $outfile = $ARGV[0] =~ s/\..+$/_bibertool.bib/r;
+      $outfile = $ARGV[0] =~ s/\.[^.]+$/_bibertool.bib/r;
     }
     elsif (Biber::Config->getoption('output_format') eq 'biblatexml') { # tool .blxtxml output
-      $outfile = $ARGV[0] =~ s/\..+$/_bibertool.bltxml/r;
+      $outfile = $ARGV[0] =~ s/\.[^.]+$/_bibertool.bltxml/r;
+    }
+    elsif (Biber::Config->getoption('output_format') eq 'bibjson') { # bibjson output
+      $outfile = $ARGV[0] =~ s/\.[^.]+$/_bibertool.json/r;
     }
   }
   else {
@@ -507,12 +510,27 @@ See C<perldoc Unicode::Collate> for details.
 =item B<--configfile|-g [file]>
 
 Use F<file> as the configuration file for C<biber> instead of looking in
-the default locations (see C<biber> PDF manual). In tool mode, (B<--tool>)
-the F<biber-tool.conf> installed with Biber is always used to set default
-options if a user-defined config file is not specified. Use the
-B<--tool-config> option to view the location of the default tool mode
-config file--copy this file and edit it to your requirements for use with
-this option in tool mode.
+the default locations which are, in order:
+
+* C<biber.conf> or C<.biber.conf> in the current directory
+
+* C<$HOME/.biber.conf>
+
+* C<$ENV{XDG_CONFIG_HOME}/biber/biber.conf>
+
+* C<$HOME/.config/biber/biber.conf>
+
+* C<$HOME/Library/biber/biber.conf> (Mac OSX only)
+
+* C<$ENV{APPDATA}/biber.conf> (Windows only)
+
+* The output of C<kpsewhich biber.conf> (if available on the system).
+
+In tool mode, (B<--tool>) the F<biber-tool.conf> installed with Biber is
+always used to set default options if a user-defined config file is not
+specified. Use the B<--tool-config> option to view the location of the
+default tool mode config file which may be useful as a source for writing
+your own.
 
 =item B<--convert-control>
 
@@ -650,7 +668,7 @@ BibTeX parsing C library which can complain about parsing errors which can be ig
 
 By default, glob (expand according to pattern) any data source filenames.
 Allows data sources to be specified like B<*.bib> to load all B<.bib> files
-in a directory. Can be overriden on a per-dataource basis with the B<glob>
+in a directory. Can be overridden on a per-dataource basis with the B<glob>
 option to B<\addbibresource> in biblatex.
 
 =item B<--nolog>
@@ -759,7 +777,7 @@ filename only). F<file> can be absolute if B<--output-directory> is not
 set. F<file> can be '-' to output directly to STDOUT. The legacy option
 B<--outfile> is supported as an alias.
 
-=item B<--output-format=dot|bibtex|biblatexml|bbl|bblxml>
+=item B<--output-format=dot|bibtex|biblatexml|bbl|bblxml|bibjson>
 
 Biber output format. Default if not specified is of course, F<bbl>. Use F<dot>
 to output a GraphViz DOT file instead of F<.bbl>. This is a directed graph of
@@ -773,10 +791,12 @@ with the output file name (unless the B<--no-bblxml-schema> option is specified)
 may validate the F<bblxml> using the schema with the B<--validate-bblxml> option.
 The legacy option B<--outformat> is supported as an alias.
 
-=item B<--output-indent=[num]>
+=item B<--output-indent=[num][t]>
 
-Indentation for body of entries in output. Effect depends on the output format. Defaults to 2.
-The legacy option B<--tool-indent> is supported as an alias.
+Indentation for body of entries in output. Effect depends on the output
+format. Defaults to 2. The C<num> can be followed by C<'t'> to specify tabs
+instead of spaces. The legacy option B<--tool-indent> is supported as an
+alias.
 
 =item B<--output-legacy-dates>
 
@@ -931,9 +951,9 @@ C<CROSSREF> and C<XDATA> fields from the output which point to a missing
 entry. Useful if you have split datafiles where the e.g. C<CROSSREF>s are
 in another file that you are not including in the tool mode run.
 
-=item B<--trace|T>
+=item B<--trace|-T>
 
-Turn on tracing. Also turns on B<--debug|d> and additionally provides a lot of low-level tracing
+Turn on tracing. Also turns on B<--debug|-D> and additionally provides a lot of low-level tracing
 information in the log.
 
 =item B<-u>
@@ -970,7 +990,12 @@ Schema validate the F<.bcf> biblatex control file.
 
 =item B<--validate-datamodel|-V>
 
-Validate the data against a data model.
+Validate the data against a data model. By default, the data model used is
+the one in the F<.bcf> file (normal mode) or in the default config file
+whose path can be shown with the C<--tool-config> option (tool mode). Use
+C<--no-default-datamodel> to ignore the default data model completely if
+you are using a complete data model via your own config file
+(with C<--configfile>).
 
 =item B<--version|-v>
 
@@ -984,9 +1009,10 @@ system APIs. If that option is enabled, use this option to turn off biber's
 UTF-16 filename support on Windows. This will result in much improved
 handling of Unicode filenames.
 
-=item B<--wraplines|-w>
+=item B<--wraplines|-w=[column]>
 
-Wrap lines in the F<.bbl> file.
+Wrap lines in the F<.bbl> file (or output F<.bib> file in tool mode) at column
+F<column> (default 80).
 
 =item B<--xdatamarker=[marker]>
 
@@ -1028,7 +1054,7 @@ L<https://github.com/plk/biber/issues>.
 =head1 COPYRIGHT & LICENSE
 
 Copyright 2009-2012 François Charette and Philip Kime, all rights reserved.
-Copyright 2012-2020 Philip Kime, all rights reserved.
+Copyright 2012-2024 Philip Kime, all rights reserved.
 
 This module is free software.  You can redistribute it and/or
 modify it under the terms of the Artistic License 2.0.

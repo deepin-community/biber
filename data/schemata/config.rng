@@ -147,6 +147,14 @@
           </element>
         </optional>
         <optional>
+          <element name="dieondatamodel">
+            <choice>
+              <value>0</value>
+              <value>1</value>
+            </choice>
+          </element>
+        </optional>
+        <optional>
           <element name="fastsort">
             <choice>
               <value>0</value>
@@ -259,6 +267,19 @@
           </element>
         </optional>
         <optional>
+          <!-- nonamestring specification -->
+          <element name="nonamestring">
+            <oneOrMore>
+              <element name="option">
+                <interleave>
+                  <attribute name="name"/>
+                  <attribute name="value"/>
+                </interleave>
+              </element>
+            </oneOrMore>
+          </element>
+        </optional>
+        <optional>
           <element name="nostdmacros">
             <choice>
               <value>0</value>
@@ -341,7 +362,17 @@
         </optional>
         <optional>
           <element name="output_indent">
-            <data type="unsignedByte"/>
+            <data type="string">
+              <param name="pattern">\d+t?</param>
+            </data>
+          </element>
+        </optional>
+        <optional>
+          <element name="output_legacy_dates">
+            <choice>
+              <value>0</value>
+              <value>1</value>
+            </choice>
           </element>
         </optional>
         <optional>
@@ -457,6 +488,9 @@
         </optional>
         <zeroOrMore>
           <ref name="uniquenametemplate"/>
+        </zeroOrMore>
+        <zeroOrMore>
+          <ref name="namehashtemplate"/>
         </zeroOrMore>
         <optional>
           <ref name="sortingnamekeytemplate"/>
@@ -634,23 +668,25 @@
   </start>
   <define name="datamodel">
     <element name="datamodel">
-      <!-- Constants -->
-      <element name="constants">
-        <oneOrMore>
-          <element name="constant">
-            <optional>
-              <attribute name="type">
-                <choice>
-                  <value>string</value>
-                  <value>list</value>
-                </choice>
-              </attribute>
-            </optional>
-            <attribute name="name"/>
-            <text/>
-          </element>
-        </oneOrMore>
-      </element>
+      <optional>
+        <!-- Constants -->
+        <element name="constants">
+          <oneOrMore>
+            <element name="constant">
+              <optional>
+                <attribute name="type">
+                  <choice>
+                    <value>string</value>
+                    <value>list</value>
+                  </choice>
+                </attribute>
+              </optional>
+              <attribute name="name"/>
+              <text/>
+            </element>
+          </oneOrMore>
+        </element>
+      </optional>
       <!-- Valid entrytypes -->
       <element name="entrytypes">
         <oneOrMore>
@@ -731,14 +767,16 @@
           </oneOrMore>
         </element>
       </oneOrMore>
-      <!-- Allowable multiscript fields which can have alternate form/languages -->
-      <element name="multiscriptfields">
-        <oneOrMore>
-          <element name="field">
-            <text/>
-          </element>
-        </oneOrMore>
-      </element>
+      <optional>
+        <!-- Allowable multiscript fields which can have alternate form/languages -->
+        <element name="multiscriptfields">
+          <oneOrMore>
+            <element name="field">
+              <text/>
+            </element>
+          </oneOrMore>
+        </element>
+      </optional>
       <oneOrMore>
         <!-- Constraints on field (co-)existence and format -->
         <element name="constraints">
@@ -752,7 +790,7 @@
               <text/>
             </element>
           </zeroOrMore>
-          <zeroOrMore>
+          <oneOrMore>
             <!-- A constraint specification -->
             <element name="constraint">
               <choice>
@@ -874,7 +912,7 @@
                 </group>
               </choice>
             </element>
-          </zeroOrMore>
+          </oneOrMore>
         </element>
       </oneOrMore>
     </element>
@@ -1221,6 +1259,20 @@
                 </attribute>
               </optional>
               <optional>
+                <attribute name="map_matches">
+                  <data type="string">
+                    <param name="minLength">1</param>
+                  </data>
+                </attribute>
+              </optional>
+              <optional>
+                <attribute name="map_matchesi">
+                  <data type="string">
+                    <param name="minLength">1</param>
+                  </data>
+                </attribute>
+              </optional>
+              <optional>
                 <attribute name="map_notmatch">
                   <data type="string">
                     <param name="minLength">1</param>
@@ -1456,9 +1508,33 @@
       </oneOrMore>
     </element>
   </define>
+  <define name="namehashtemplate">
+    <element name="namehashtemplate">
+      <attribute name="name">
+        <data type="string">
+          <param name="minLength">1</param>
+        </data>
+      </attribute>
+      <oneOrMore>
+        <element name="namepart">
+          <attribute name="order">
+            <data type="integer"/>
+          </attribute>
+          <attribute name="hashscope">
+            <choice>
+              <value>init</value>
+              <value>full</value>
+            </choice>
+          </attribute>
+          <text/>
+        </element>
+      </oneOrMore>
+    </element>
+  </define>
   <define name="sortingnamekeytemplate">
     <element name="sortingnamekeytemplate">
       <attribute name="name"/>
+      <attribute name="visibility"/>
       <oneOrMore>
         <element name="keypart">
           <attribute name="order">
@@ -1651,7 +1727,7 @@
     </choice>
   </define>
 </grammar>
-<!-- Copyright 2012-2020 Philip Kime, all rights reserved. -->
+<!-- Copyright 2012-2024 Philip Kime, all rights reserved. -->
 <!--
   This code is free software.  You can redistribute it and/or
   modify it under the terms of the Artistic License 2.0.

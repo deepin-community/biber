@@ -22,7 +22,7 @@ use Unicode::Normalize;
 use parent qw(Class::Accessor);
 __PACKAGE__->follow_best_practice;
 
-our $VERSION = '2.16';
+our $VERSION = '2.20';
 our $BETA_VERSION = 0; # Is this a beta version?
 
 our $logger  = Log::Log4perl::get_logger('main');
@@ -69,12 +69,10 @@ $CONFIG->{state}{xdata} = [];
 # Used for generating inheritance trees
 $CONFIG->{state}{graph} = {};
 
-$CONFIG->{state}{seenkeys} = {};
-$CONFIG->{globalstate}{seenkeys} = {};
-
 # Track the order of keys as cited. Keys cited in the same \cite*{} get the same order
 # Used for sorting schemes which use \citeorder
 $CONFIG->{state}{keyorder} = {};
+$CONFIG->{state}{internalkeyorder} = {};
 
 # Location of the control file
 $CONFIG->{state}{control_file_location} = '';
@@ -93,7 +91,6 @@ sub _init {
   $CONFIG->{state}{control_file_location} = '';
   $CONFIG->{state}{crossrefkeys} = {};
   $CONFIG->{state}{xrefkeys} = {};
-  $CONFIG->{state}{seenkeys} = {};
   $CONFIG->{state}{datafiles} = [];
   $CONFIG->{state}{crossref} = [];
   $CONFIG->{state}{xdata} = [];
@@ -198,6 +195,7 @@ sub _initopts {
   # Set log file name
   my $biberlog;
   if (my $log = Biber::Config->getoption('logfile')) { # user specified logfile name
+    $log = Biber::Utils::biber_decode_utf8($log);
     # Sanitise user-specified log name
     $log =~ s/\.blg\z//xms;
     $biberlog = $log . '.blg';
@@ -209,12 +207,13 @@ sub _initopts {
     my $bcf = $ARGV[0];         # ARGV is ok even in a module
     # Sanitise control file name
     $bcf =~ s/\.bcf\z//xms;
-    $biberlog = $bcf . '.blg';
+    $biberlog = Biber::Utils::biber_decode_utf8($bcf . '.blg');
   }
 
   # prepend output directory for log, if specified
   if (my $outdir = Biber::Config->getoption('output_directory')) {
-    $biberlog = File::Spec->catfile($outdir, $biberlog);
+    my (undef, undef, $biberlogfile) = File::Spec->splitpath($biberlog);
+    $biberlog = File::Spec->catfile($outdir, $biberlogfile);
   }
 
   # Parse output-field-replace into something easier to use
@@ -227,9 +226,7 @@ sub _initopts {
 
   # cache meta markers since they are referenced in the oft-called _get_handler
   $CONFIG_META_MARKERS{annotation} = quotemeta(Biber::Config->getoption('annotation_marker'));
-
   $CONFIG_META_MARKERS{namedannotation} = quotemeta(Biber::Config->getoption('named_annotation_marker'));
-  $CONFIG_META_MARKERS{xname} = quotemeta(Biber::Config->getoption('xname_marker'));
 
   # Setting up Log::Log4perl
   my $LOGLEVEL;
@@ -306,12 +303,12 @@ sub _initopts {
 
   my $vn = $VERSION;
   $vn .= ' (beta)' if $BETA_VERSION;
-  my $tool = ' running in TOOL mode' if Biber::Config->getoption('tool');
+  my $tool = Biber::Config->getoption('tool') ? ' running in TOOL mode' : '';
 
   $logger->info("This is Biber $vn$tool") unless Biber::Config->getoption('nolog');
 
-  $logger->info("Config file is '" . $opts->{configfile} . "'") if $opts->{configfile};
-  $logger->info("Logfile is '$biberlog'") unless Biber::Config->getoption('nolog');
+  $logger->info("Config file is '" . NFC($opts->{configfile}) . "'") if $opts->{configfile};
+  $logger->info("Logfile is '" . NFC($biberlog) . "'") unless Biber::Config->getoption('nolog');
 
   if (Biber::Config->getoption('debug')) {
     $screen->info("DEBUG mode: all messages are logged to '$biberlog'")
@@ -358,6 +355,7 @@ sub _config_file_set {
                                                             qr/\Aentrytype\z/,
                                                             qr/\Aentryfields\z/,
                                                             qr/\Adatetype\z/,
+                                                            qr/\Adatafieldset\z/,
                                                             qr/\Acondition\z/,
                                                             qr/\A(?:or)?filter\z/,
                                                             qr/\Asortexclusion\z/,
@@ -368,6 +366,7 @@ sub _config_file_set {
                                                             qr/\Alabelalpha(?:name)?template\z/,
                                                             qr/\Asortitem\z/,
                                                             qr/\Auniquenametemplate\z/,
+                                                            qr/\Anamehashtemplate\z/,
                                                             qr/\Apresort\z/,
                                                             qr/\Aoptionscope\z/,
                                                             qr/\Asortingnamekeytemplate\z/,
@@ -469,6 +468,18 @@ sub _config_file_set {
       }
       Biber::Config->setblxoption(0, 'uniquenametemplate', $unts);
     }
+    elsif (lc($k) eq 'namehashtemplate') {
+      my $nhts;
+      foreach my $nht ($v->@*) {
+        my $nhtval = [];
+        foreach my $np (sort {$a->{order} <=> $b->{order}} $nht->{namepart}->@*) {
+          push $nhtval->@*, {namepart        => $np->{content},
+                             hashscope       => $np->{hashscope}};
+        }
+        $nhts->{$nht->{name}} = $nhtval;
+      }
+      Biber::Config->setblxoption(0, 'namehashtemplate', $nhts);
+    }
     elsif (lc($k) eq 'sortingnamekeytemplate') {
       my $snss;
       foreach my $sns ($v->@*) {
@@ -493,7 +504,8 @@ sub _config_file_set {
           }
           push $snkps->@*, $snps;
         }
-        $snss->{$sns->{name}} = $snkps;
+        $snss->{$sns->{name}}{visibility} = $sns->{visibility};
+        $snss->{$sns->{name}}{template} = $snkps;
       }
       Biber::Config->setblxoption(0, 'sortingnamekeytemplate', $snss);
     }
@@ -604,11 +616,11 @@ sub _config_file_set {
 =head2 config_file
 
 Returns the full path of the B<Biber> configuration file.
-If returns the first file found among:
+It returns the first file found among:
 
 =over 4
 
-=item * C<biber.conf> in the current directory
+=item * C<biber.conf> or C<.biber.conf> in the current directory
 
 =item * C<$HOME/.biber.conf>
 
@@ -633,6 +645,9 @@ sub config_file {
 
   if ( -f $BIBER_CONF_NAME ) {
     $biberconf = abs_path($BIBER_CONF_NAME);
+  }
+  elsif ( -f ".$BIBER_CONF_NAME" ) {
+    $biberconf = abs_path(".$BIBER_CONF_NAME");
   }
   elsif ( -f File::Spec->catfile($ENV{HOME}, ".$BIBER_CONF_NAME" ) ) {
     $biberconf = File::Spec->catfile($ENV{HOME}, ".$BIBER_CONF_NAME" );
@@ -927,6 +942,10 @@ sub addtoblxoption {
 sub setblxoption {
   shift; # class method so don't care about class name
   my ($secnum, $opt, $val, $scope, $scopeval) = @_;
+
+  # Map booleans to 1 and 0 for consistent testing
+  $val = Biber::Utils::map_boolean($opt, $val, 'tonum');
+
   if (not defined($scope)) { # global is the default
     if ($CONFIG_OPTSCOPE_BIBLATEX{$opt}{GLOBAL}) {
       $CONFIG->{options}{biblatex}{GLOBAL}{$opt} = $val;
@@ -965,6 +984,11 @@ sub getblxoption {
   no autovivification;
   shift; # class method so don't care about class name
   my ($secnum, $opt, $entrytype, $citekey) = @_;
+  # Set impossible defaults
+  $secnum //= "\x{10FFFD}";
+  $opt //= "\x{10FFFD}";
+  $entrytype //= "\x{10FFFD}";
+  $citekey //= "\x{10FFFD}";
   if ( defined($citekey) and
        $CONFIG_OPTSCOPE_BIBLATEX{$opt}{ENTRY} and
        defined $CONFIG->{options}{biblatex}{ENTRY}{$citekey}{$secnum}{$opt}) {
@@ -1115,7 +1139,7 @@ sub is_inheritance_path {
 
 =head2 set_keyorder
 
-  Set some key order information
+  Set key order information
 
 =cut
 
@@ -1126,9 +1150,22 @@ sub set_keyorder {
   return;
 }
 
+=head2 set_internal_keyorder
+
+  Set key order information for keys with the same order
+
+=cut
+
+sub set_internal_keyorder {
+  shift; # class method so don't care about class name
+  my ($section, $key, $intkeyorder) = @_;
+  $CONFIG->{state}{internalkeyorder}{$section}{$key} = $intkeyorder;
+  return;
+}
+
 =head2 get_keyorder
 
-  Get some key order information
+  Get key order information
 
 =cut
 
@@ -1136,6 +1173,18 @@ sub get_keyorder {
   shift; # class method so don't care about class name
   my ($section, $key) = @_;
   return $CONFIG->{state}{keyorder}{$section}{$key};
+}
+
+=head2 get_internal_keyorder
+
+  Get key order information for keys with the same order
+
+=cut
+
+sub get_internal_keyorder {
+  shift; # class method so don't care about class name
+  my ($section, $key) = @_;
+  return $CONFIG->{state}{internalkeyorder}{$section}{$key};
 }
 
 
@@ -1164,42 +1213,6 @@ sub reset_keyorder {
   return;
 }
 
-
-=head1 seenkey
-
-=head2 get_seenkey
-
-    Get the count of a key
-
-=cut
-
-sub get_seenkey {
-  shift; # class method so don't care about class name
-  my $key = shift;
-  my $section = shift; # If passed, return count for just this section
-  if (defined($section)) {
-    return $CONFIG->{state}{seenkeys}{$section}{$key};
-  }
-  else {
-    return $CONFIG->{globalstate}{seenkeys}{$key};
-  }
-}
-
-
-=head2 incr_seenkey
-
-    Increment the seen count of a key
-
-=cut
-
-sub incr_seenkey {
-  shift; # class method so don't care about class name
-  my $key = shift;
-  my $section = shift;
-  $CONFIG->{state}{seenkeys}{$section}{$key}++;
-  $CONFIG->{globalstate}{seenkeys}{$key}++;
-  return;
-}
 
 =head1 crossrefkeys
 
@@ -1336,7 +1349,7 @@ L<https://github.com/plk/biber/issues>.
 
 =head1 COPYRIGHT & LICENSE
 
-Copyright 2012-2020 Philip Kime, all rights reserved.
+Copyright 2012-2024 Philip Kime, all rights reserved.
 
 This module is free software.  You can redistribute it and/or
 modify it under the terms of the Artistic License 2.0.

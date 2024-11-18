@@ -1,0 +1,2 @@
+biber source: debian-watch-does-not-check-openpgp-signature
+biber source: prefer-uscan-symlink

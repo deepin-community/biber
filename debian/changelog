@@ -1,3 +1,85 @@
+biber (2.20-2) unstable; urgency=medium
+
+  * Upload to unstable.
+
+ -- Hilmar Preusse <hille42@web.de>  Sun, 26 May 2024 16:50:59 +0200
+
+biber (2.20-1) experimental; urgency=medium
+
+  * New upstream release, disable upstreamed patch.
+  * Bump Breaks version of texlive-bibtex-extra.
+  * Bump Standards version, no changes needed.
+
+ -- Hilmar Preusse <hille42@web.de>  Sun, 21 Apr 2024 23:30:39 +0200
+
+biber (2.19-2) unstable; urgency=medium
+
+  * Upload to unstable.
+
+ -- Hilmar Preusse <hille42@web.de>  Sun, 27 Aug 2023 23:42:30 +0200
+
+biber (2.19-1) experimental; urgency=medium
+
+  * New upstream release.
+  * Breaks to older texlive-bibtex-extra, make sure new biblatex
+    is installed.
+  * Run luatex twice when building the documentation (Closes: #1034383).
+  * Mark Debian-specific patches as "Forwarded: not-needed" in metadata.
+  * Remove obsolete patches.
+
+ -- Hilmar Preusse <hille42@web.de>  Wed, 21 Jun 2023 10:23:24 +0200
+
+biber (2.18-1) unstable; urgency=medium
+
+  * New upstream release, bump Breaks version of texlive-bibtex-extra.
+  * Refresh patches, disable patches applied in upstream.
+
+ -- Hilmar Preusse <hille42@web.de>  Sun, 24 Jul 2022 13:53:19 +0200
+
+biber (2.17-3) unstable; urgency=medium
+
+  * Copy commit 54a68aa and (partial) ccd7a44 from upstream. This
+    solves many warnings during run time (Closes: #1006626).
+  * Add the new package libencode-eucjpascii-perl to BD & Dep
+    to get rid of a build warning.
+
+ -- Hilmar Preusse <hille42@web.de>  Tue, 22 Mar 2022 23:26:22 +0100
+
+biber (2.17-2) unstable; urgency=medium
+
+  * Add "Restrictions: build-needed" for test suite.
+  * Breaks to older texlive-bibtex-extra, make sure new biblatex
+    is installed (Closes: #1004671).
+
+ -- Hilmar Preusse <hille42@web.de>  Fri, 04 Feb 2022 22:56:25 +0100
+
+biber (2.17-1) unstable; urgency=medium
+
+  * New upstream release, disable / update applied patches.
+  * Lintian fixes & overrides.
+  * Standards Version 4.6.0, no changes needed.
+  * Do not execute test suite during build, turn it into autopkg test.
+
+ -- Hilmar Preusse <hille42@web.de>  Fri, 28 Jan 2022 22:55:58 +0100
+
+biber (2.16-2) unstable; urgency=medium
+
+  [ Hilmar Preusse ]
+  * Move links/install overrides from d/rules into separate files.
+  * Call lualatex w/ option --utc when building doc (see #990999).
+  * Add patch "reproducible builds: timezone-specific timestamps in PDF".
+    (Closes: #990999)
+
+  [ Debian Janitor ]
+  * Remove constraints unnecessary since buster:
+    + Build-Depends: Drop versioned constraint on libconfig-autoconf-perl,
+      libextutils-libbuilder-perl, liblingua-translit-perl,
+      libtest-pod-coverage-perl and libtest-pod-perl.
+    + biber: Drop versioned constraint on liblingua-translit-perl and
+      libunicode-collate-perl in Depends.
+
+ -- Hilmar Preusse <hille42@web.de>  Fri, 31 Dec 2021 13:51:21 +0100
+
 biber (2.16-1) unstable; urgency=medium
 
   * New upstream release: refresh patches.

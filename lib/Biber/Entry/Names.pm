@@ -16,13 +16,14 @@ my $logger = Log::Log4perl::get_logger('main');
 # by the option scope in the .bcf
 __PACKAGE__->mk_accessors(qw (
                               id
+                              type
                             ));
 
 =encoding utf-8
 
 =head1 NAME
 
-Biber::Entry::Names
+Biber::Entry::Names - Biber::Entry::Names objects
 
 =head2 new
 
@@ -37,21 +38,6 @@ sub new {
                 id       => suniqid,
                 %params}, $class;
 }
-
-
-=head2 TO_JSON
-
-   Serialiser for JSON::XS::encode
-
-=cut
-
-# sub TO_JSON {
-#   my $self = shift;
-#   foreach my $n ($self->@*){
-#     $json->{$k} = $v;
-#   }
-#   return [ map {$_} $self->@* ];
-# }
 
 =head2 notnull
 
@@ -106,6 +92,23 @@ sub replace_name {
   return;
 }
 
+=head2 splice
+
+    Splice a Biber::Entry::Names object into a Biber::Entry::Names object at a
+    position (1-based)
+
+=cut
+
+sub splice {
+  my ($self, $names, $position) = @_;
+  splice($self->{namelist}->@*, $position-1, 1, $names->{namelist}->@*);
+  # now re-index all names in list
+  foreach (my $i=0;$i<$#{$self->{namelist}};$i++) {
+    $self->{namelist}->[$i]->set_index($i);
+  }
+  return;
+}
+
 =head2 set_morenames
 
     Sets a flag to say that we had a "and others" in the data
@@ -129,13 +132,13 @@ sub get_morenames {
   return $self->{morenames} ? 1 : 0;
 }
 
-=head2 count_names
+=head2 count
 
     Returns the number of Biber::Entry::Name objects in the object
 
 =cut
 
-sub count_names {
+sub count {
   my $self = shift;
   return scalar $self->{namelist}->@*;
 }
@@ -241,7 +244,7 @@ L<https://github.com/plk/biber/issues>.
 =head1 COPYRIGHT & LICENSE
 
 Copyright 2009-2012 François Charette and Philip Kime, all rights reserved.
-Copyright 2012-2020 Philip Kime, all rights reserved.
+Copyright 2012-2024 Philip Kime, all rights reserved.
 
 This module is free software.  You can redistribute it and/or
 modify it under the terms of the Artistic License 2.0.

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <?xml-stylesheet type="text/xsl" href="../../data/bcf.xsl"?>
 <?xml-model href="../../data/schemata/bcf.rnc" type="application/relax-ng-compact-syntax"?>
-<bcf:controlfile version="3.7" bltxversion="3.14" xmlns:bcf="https://sourceforge.net/projects/biblatex">
+<bcf:controlfile version="3.11" bltxversion="3.20" xmlns:bcf="https://sourceforge.net/projects/biblatex">
   <!-- OPTIONS -->
   <bcf:options component="biber" type="global">
     <bcf:option type="singlevalued">
@@ -37,6 +37,11 @@
     <bcf:option type="singlevalued">
       <bcf:key>alphaothers</bcf:key>
       <bcf:value>\textbf{+}</bcf:value>
+    </bcf:option>
+    <bcf:option type="multivalued">
+      <bcf:key>extradatecontext</bcf:key>
+      <bcf:value order="1">labelname</bcf:value>
+      <bcf:value order="2">labeltitle</bcf:value>
     </bcf:option>
     <bcf:option type="singlevalued">
       <bcf:key>labelalpha</bcf:key>
@@ -128,6 +133,10 @@
       <bcf:value>0</bcf:value>
     </bcf:option>
     <bcf:option type="singlevalued">
+      <bcf:key>pluralothers</bcf:key>
+      <bcf:value>0</bcf:value>
+    </bcf:option>
+    <bcf:option type="singlevalued">
       <bcf:key>singletitle</bcf:key>
       <bcf:value>0</bcf:value>
     </bcf:option>
@@ -202,12 +211,14 @@
   </bcf:options>
   <!-- BIBLATEX OPTION SCOPE -->
   <bcf:optionscope type="GLOBAL">
+    <bcf:option datatype="xml">extradatecontext</bcf:option>
     <bcf:option datatype="xml">datamodel</bcf:option>
     <bcf:option datatype="xml">labelalphanametemplate</bcf:option>
     <bcf:option datatype="xml">labelalphatemplate</bcf:option>
     <bcf:option datatype="xml">inheritance</bcf:option>
     <bcf:option datatype="xml">translit</bcf:option>
     <bcf:option datatype="xml">uniquenametemplate</bcf:option>
+    <bcf:option datatype="xml">namehashtemplate</bcf:option>
     <bcf:option datatype="xml">sortingnamekeytemplate</bcf:option>
     <bcf:option datatype="xml">sortingtemplate</bcf:option>
     <bcf:option datatype="xml">extradatespec</bcf:option>
@@ -286,6 +297,7 @@
     <bcf:option datatype="boolean">noroman</bcf:option>
     <bcf:option datatype="boolean">nohashothers</bcf:option>
     <bcf:option datatype="boolean">nosortothers</bcf:option>
+    <bcf:option datatype="boolean">pluralothers</bcf:option>
     <bcf:option datatype="boolean">singletitle</bcf:option>
     <bcf:option datatype="boolean">uniquebaretitle</bcf:option>
     <bcf:option datatype="boolean">uniqueprimaryauthor</bcf:option>
@@ -362,6 +374,7 @@
     <bcf:option datatype="integer">dateeraauto</bcf:option>
   </bcf:optionscope>
   <bcf:optionscope type="ENTRYTYPE">
+    <bcf:option datatype="xml">extradatecontext</bcf:option>
     <bcf:option datatype="string">alphaothers</bcf:option>
     <bcf:option datatype="string">sortalphaothers</bcf:option>
     <bcf:option datatype="string">presort</bcf:option>
@@ -428,9 +441,10 @@
   </bcf:optionscope>
   <bcf:optionscope type="ENTRY">
     <bcf:option datatype="string">noinherit</bcf:option>
-    <bcf:option datatype="string" backendin="sortingnamekeytemplatename,uniquenametemplatename,labelalphanametemplatename">nametemplates</bcf:option>
+    <bcf:option datatype="string" backendin="sortingnamekeytemplatename,uniquenametemplatename,labelalphanametemplatename,namehashtemplatename">nametemplates</bcf:option>
     <bcf:option datatype="string" backendout="1">labelalphanametemplatename</bcf:option>
     <bcf:option datatype="string" backendout="1">uniquenametemplatename</bcf:option>
+    <bcf:option datatype="string" backendout="1">namehashtemplatename</bcf:option>
     <bcf:option datatype="string" backendout="1">sortingnamekeytemplatename</bcf:option>
     <bcf:option datatype="string">presort</bcf:option>
     <bcf:option datatype="string" backendout="1">uniquelist</bcf:option>
@@ -487,9 +501,10 @@
     <bcf:option datatype="integer" backendout="1">minalphanames</bcf:option>
   </bcf:optionscope>
   <bcf:optionscope type="NAMELIST">
-    <bcf:option datatype="string" backendin="sortingnamekeytemplatename,uniquenametemplatename,labelalphanametemplatename">nametemplates</bcf:option>
+    <bcf:option datatype="string" backendin="sortingnamekeytemplatename,uniquenametemplatename,labelalphanametemplatename,namehashtemplatename">nametemplates</bcf:option>
     <bcf:option datatype="string" backendout="1">sortingnamekeytemplatename</bcf:option>
     <bcf:option datatype="string" backendout="1">uniquenametemplatename</bcf:option>
+    <bcf:option datatype="string" backendout="1">namehashtemplatename</bcf:option>
     <bcf:option datatype="string">uniquelist</bcf:option>
     <bcf:option datatype="string">uniquename</bcf:option>
     <bcf:option datatype="string" backendout="1">labelalphanametemplatename</bcf:option>
@@ -498,9 +513,10 @@
     <bcf:option datatype="boolean">nosortothers</bcf:option>
   </bcf:optionscope>
   <bcf:optionscope type="NAME">
-    <bcf:option datatype="string" backendin="sortingnamekeytemplatename,uniquenametemplatename,labelalphanametemplatename">nametemplates</bcf:option>
+    <bcf:option datatype="string" backendin="sortingnamekeytemplatename,uniquenametemplatename,labelalphanametemplatename,namehashtemplatename">nametemplates</bcf:option>
     <bcf:option datatype="string" backendout="1">sortingnamekeytemplatename</bcf:option>
     <bcf:option datatype="string" backendout="1">uniquenametemplatename</bcf:option>
+    <bcf:option datatype="string" backendout="1">namehashtemplatename</bcf:option>
     <bcf:option datatype="string">uniquename</bcf:option>
     <bcf:option datatype="string" backendout="1">labelalphanametemplatename</bcf:option>
     <bcf:option datatype="boolean" backendout="1">useprefix</bcf:option>
@@ -706,8 +722,15 @@
     <bcf:namepart order="2" base="1">family</bcf:namepart>
     <bcf:namepart order="3">given</bcf:namepart>
   </bcf:uniquenametemplate>
+  <!-- NAME HASH TEMPLATES -->
+  <bcf:namehashtemplate name="global">
+    <bcf:namepart order="1" hashscope="full">family</bcf:namepart>
+    <bcf:namepart order="2" hashscope="full">given</bcf:namepart>
+    <bcf:namepart order="3" hashscope="full">prefix</bcf:namepart>
+    <bcf:namepart order="4" hashscope="full">suffix</bcf:namepart>
+  </bcf:namehashtemplate>
   <!-- SORTING NAME KEY TEMPLATE -->
-  <bcf:sortingnamekeytemplate name="global">
+  <bcf:sortingnamekeytemplate name="global" visibility="sort">
     <bcf:keypart order="1">
       <bcf:part type="namepart" order="1" use="1">prefix</bcf:part>
       <bcf:part type="namepart" order="2">family</bcf:part>
@@ -739,14 +762,6 @@
       <bcf:entrytype>misc</bcf:entrytype>
     </bcf:entrytypes>
     <bcf:fields>
-      <bcf:field fieldtype="field" datatype="datepart">season</bcf:field>
-      <bcf:field fieldtype="field" datatype="datepart">endseason</bcf:field>
-      <bcf:field fieldtype="field" datatype="datepart">eventseason</bcf:field>
-      <bcf:field fieldtype="field" datatype="datepart">eventendseason</bcf:field>
-      <bcf:field fieldtype="field" datatype="datepart">origseason</bcf:field>
-      <bcf:field fieldtype="field" datatype="datepart">origendseason</bcf:field>
-      <bcf:field fieldtype="field" datatype="datepart">urlseason</bcf:field>
-      <bcf:field fieldtype="field" datatype="datepart">urlendseason</bcf:field>
       <bcf:field fieldtype="field" datatype="datepart" nullok="true">endyear</bcf:field>
       <bcf:field fieldtype="field" datatype="datepart">year</bcf:field>
       <bcf:field fieldtype="field" datatype="datepart">month</bcf:field>
@@ -1240,16 +1255,16 @@
     <bcf:datasource type="file" datatype="bibtex">dm-constraints.bib</bcf:datasource>
   </bcf:bibdata>
   <bcf:section number="0">
-    <bcf:citekey order="1">c1</bcf:citekey>
-    <bcf:citekey order="2">c2</bcf:citekey>
-    <bcf:citekey order="3">c3</bcf:citekey>
-    <bcf:citekey order="4">c4</bcf:citekey>
-    <bcf:citekey order="5">c5</bcf:citekey>
-    <bcf:citekey order="6">c6</bcf:citekey>
-    <bcf:citekey order="7">c7</bcf:citekey>
-    <bcf:citekey order="8">c8</bcf:citekey>
-    <bcf:citekey order="9">c9</bcf:citekey>
-    <bcf:citekey order="10">c10</bcf:citekey>
+    <bcf:citekey order="1" intorder="1">c1</bcf:citekey>
+    <bcf:citekey order="2" intorder="1">c2</bcf:citekey>
+    <bcf:citekey order="3" intorder="1">c3</bcf:citekey>
+    <bcf:citekey order="4" intorder="1">c4</bcf:citekey>
+    <bcf:citekey order="5" intorder="1">c5</bcf:citekey>
+    <bcf:citekey order="6" intorder="1">c6</bcf:citekey>
+    <bcf:citekey order="7" intorder="1">c7</bcf:citekey>
+    <bcf:citekey order="8" intorder="1">c8</bcf:citekey>
+    <bcf:citekey order="9" intorder="1">c9</bcf:citekey>
+    <bcf:citekey order="10" intorder="1">c10</bcf:citekey>
   </bcf:section>
   <!-- SORTING TEMPLATES -->
   <bcf:sortingtemplate name="nty">
@@ -1312,11 +1327,12 @@
   <!-- DATA LISTS -->
   <bcf:datalist sortingnamekeytemplatename="global"
                 section="0"
-                name="nyt/global//global/global"
+                name="nyt/global//global/global/global"
                 sortingtemplatename="nyt"
                 type="entry"
                 labelprefix=""
                 uniquenametemplatename="global"
-                labelalphanametemplatename="global"/>
+                labelalphanametemplatename="global"
+                namehashtemplatename="global"/>
 </bcf:controlfile>
 

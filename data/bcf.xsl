@@ -461,6 +461,11 @@
                           <xsl:text disable-output-escaping="yes">&amp;rarr;</xsl:text><xsl:value-of select="./@map_field_target"/>
                         </xsl:if>
                         <xsl:if test="./@map_match"> <xsl:text disable-output-escaping="yes">&amp;asymp;</xsl:text> <span class="map_regexp"><xsl:value-of select="./@map_match"/></span></xsl:if>
+                        <xsl:if test="./@map_matchi"> <xsl:text disable-output-escaping="yes">&amp;asymp;</xsl:text> <span class="map_regexp"><xsl:value-of select="./@map_matchi"/></span></xsl:if>
+                        <xsl:if test="./@map_notmatch"> <xsl:text disable-output-escaping="yes">&amp;asymp;</xsl:text> <span class="map_regexp"><xsl:value-of select="./@map_notmatch"/></span></xsl:if>
+                        <xsl:if test="./@map_notmatchi"> <xsl:text disable-output-escaping="yes">&amp;asymp;</xsl:text> <span class="map_regexp"><xsl:value-of select="./@map_notmatchi"/></span></xsl:if>
+                        <xsl:if test="./@map_matches"> <xsl:text disable-output-escaping="yes">&amp;asymp;</xsl:text> <span class="map_regexp"><xsl:value-of select="./@map_matches"/></span></xsl:if>
+                        <xsl:if test="./@map_matchesi"> <xsl:text disable-output-escaping="yes">&amp;asymp;</xsl:text> <span class="map_regexp"><xsl:value-of select="./@map_matchesi"/></span></xsl:if>
                         <xsl:if test="./@map_replace"> <xsl:text disable-output-escaping="yes">&amp;rarr;</xsl:text> <span class="map_regexp"><xsl:value-of select="./@map_replace"/></span></xsl:if>
                       </xsl:if>
 
@@ -930,11 +935,28 @@
           </tbody>
         </table>
         <br/>
+        <h4>Name hash Template</h4>
+        <table>
+          <thead>
+            <tr><td>Order</td><td>Scope</td><td>Namepart</td></tr>
+          </thead>
+          <tbody>
+            <xsl:for-each select="/bcf:controlfile/bcf:namehashtemplate/bcf:namepart">
+              <xsl:sort select="./@order"/>
+              <tr>
+                <td><xsl:value-of select="./@order"/></td>
+                <td><xsl:value-of select="./@hashscope"/></td>
+                <td><xsl:value-of select="./text()"/></td>
+              </tr>
+            </xsl:for-each>
+          </tbody>
+        </table>
+        <br/>
         <h4>Sorting Name Key Template</h4>
         <xsl:for-each select="/bcf:controlfile/bcf:sortingnamekeytemplate">
           <table>
             <thead>
-              <tr><td colspan="2"><b><xsl:value-of select="./@name"/></b></td></tr>
+              <tr><td colspan="2"><b><xsl:value-of select="./@name"/></b> (visibility: <xsl:value-of select="./@visibility"/>)</td></tr>
               <tr><td>Order</td><td>Keypart</td></tr>
             </thead>
             <tbody>
@@ -1193,7 +1215,7 @@
         <h4>Section 0</h4>
         <table>
           <thead>
-            <tr><td>Data sources</td><td>Citekeys</td><td>Dynamic sets</td></tr>
+            <tr><td>Data sources</td><td>Citekeys</td><td>Citekey counts</td><td>Dynamic sets</td></tr>
           </thead>
           <tbody>
             <tr>
@@ -1219,6 +1241,14 @@
               <td>
                 <ul>
                   <xsl:for-each
+                      select="/bcf:controlfile/bcf:section[@number='0']/bcf:citekeycount">
+                    <li><tt><xsl:value-of select="./text()"/> (<xsl:value-of select="./@count"/>)</tt></li>
+                  </xsl:for-each>
+                </ul>
+              </td>
+              <td>
+                <ul>
+                  <xsl:for-each
                       select="/bcf:controlfile/bcf:section[@number='0']/bcf:citekey[@type='set']">
                     <li><tt><xsl:value-of select="./text()"/><xsl:text disable-output-escaping="yes">&amp;nbsp;</xsl:text>(<xsl:value-of select="./@members"/>)</tt></li>
                   </xsl:for-each>
@@ -1233,7 +1263,7 @@
           <h4>Section <xsl:value-of select="$secnum"/></h4>
           <table>
             <thead>
-              <tr><td>Data sources</td><td>Citekeys</td></tr>
+              <tr><td>Data sources</td><td>Citekeys</td><td>Citekey counts</td></tr>
             </thead>
             <tbody>
               <tr>
@@ -1252,6 +1282,13 @@
                   <ul>
                     <xsl:for-each select="./bcf:citekey">
                       <li><tt><xsl:value-of select="./text()"/></tt></li>
+                    </xsl:for-each>
+                  </ul>
+                </td>
+                <td>
+                  <ul>
+                    <xsl:for-each select="./bcf:citekeycount">
+                      <li><tt><xsl:value-of select="./text()"/> (<xsl:value-of select="./@count"/>)</tt></li>
                     </xsl:for-each>
                   </ul>
                 </td>
@@ -1297,8 +1334,8 @@
   </xsl:template>
 </xsl:stylesheet>
 <!--
-    Copyright 2012-2020 Philip Kime, all rights reserved.
-    
+    Copyright 2012-2024 Philip Kime, all rights reserved.
+
     This code is free software.  You can redistribute it and/or
     modify it under the terms of the Artistic License 2.0.
 

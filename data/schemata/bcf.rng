@@ -47,6 +47,7 @@
           <value>global</value>
         </attribute>
         <ref name="alphaothers"/>
+        <ref name="extradatecontext"/>
         <ref name="labelalpha"/>
         <ref name="labelnamespec"/>
         <ref name="labeltitle"/>
@@ -69,6 +70,7 @@
         <ref name="nohashothers"/>
         <ref name="noroman"/>
         <ref name="nosortothers"/>
+        <ref name="pluralothers"/>
         <ref name="singletitle"/>
         <ref name="skipbib"/>
         <ref name="skipbiblist"/>
@@ -97,6 +99,9 @@
           <attribute name="type"/>
           <optional>
             <ref name="alphaothers"/>
+          </optional>
+          <optional>
+            <ref name="extradatecontext"/>
           </optional>
           <optional>
             <ref name="labelalpha"/>
@@ -181,6 +186,9 @@
           </optional>
           <optional>
             <ref name="uniquename"/>
+          </optional>
+          <optional>
+            <ref name="uniqueprimaryauthor"/>
           </optional>
           <optional>
             <ref name="uniquetitle"/>
@@ -638,6 +646,22 @@
           </oneOrMore>
         </element>
       </optional>
+      <optional>
+        <!-- nonamestring specification -->
+        <element name="bcf:nonamestrings">
+          <oneOrMore>
+            <element name="bcf:nonamestring">
+              <attribute name="field">
+                <data type="string"/>
+              </attribute>
+              <attribute name="value">
+                <data type="string"/>
+              </attribute>
+              <empty/>
+            </element>
+          </oneOrMore>
+        </element>
+      </optional>
       <zeroOrMore>
         <!-- Transliteration specification(s) -->
         <ref name="translit"/>
@@ -645,6 +669,10 @@
       <oneOrMore>
         <!-- Uniquename template -->
         <ref name="uniquenametemplate"/>
+      </oneOrMore>
+      <oneOrMore>
+        <!-- Name hash template -->
+        <ref name="namehashtemplate"/>
       </oneOrMore>
       <oneOrMore>
         <!-- Sorting name key specification -->
@@ -802,7 +830,7 @@
                   <text/>
                 </element>
               </zeroOrMore>
-              <zeroOrMore>
+              <oneOrMore>
                 <!-- A constraint specification -->
                 <element name="bcf:constraint">
                   <choice>
@@ -924,7 +952,7 @@
                     </group>
                   </choice>
                 </element>
-              </zeroOrMore>
+              </oneOrMore>
             </element>
           </oneOrMore>
         </element>
@@ -970,6 +998,9 @@
           <data type="string"/>
         </attribute>
         <attribute name="labelalphanametemplatename">
+          <data type="string"/>
+        </attribute>
+        <attribute name="namehashtemplatename">
           <data type="string"/>
         </attribute>
         <!-- name is only needed for list types -->
@@ -1065,10 +1096,34 @@
       </oneOrMore>
     </element>
   </define>
+  <define name="namehashtemplate">
+    <element name="bcf:namehashtemplate">
+      <attribute name="name">
+        <data type="string">
+          <param name="minLength">1</param>
+        </data>
+      </attribute>
+      <oneOrMore>
+        <element name="bcf:namepart">
+          <attribute name="order">
+            <data type="integer"/>
+          </attribute>
+          <attribute name="hashscope">
+            <choice>
+              <value>init</value>
+              <value>full</value>
+            </choice>
+          </attribute>
+          <text/>
+        </element>
+      </oneOrMore>
+    </element>
+  </define>
   <define name="sortingnamekeytemplate">
     <oneOrMore>
       <element name="bcf:sortingnamekeytemplate">
         <attribute name="name"/>
+        <attribute name="visibility"/>
         <oneOrMore>
           <element name="bcf:keypart">
             <attribute name="order">
@@ -1244,6 +1299,17 @@
                 </choice>
               </attribute>
             </optional>
+            <optional>
+              <attribute name="encoding"/>
+            </optional>
+            <optional>
+              <attribute name="glob">
+                <choice>
+                  <value>true</value>
+                  <value>false</value>
+                </choice>
+              </attribute>
+            </optional>
             <data type="anyURI"/>
           </element>
         </zeroOrMore>
@@ -1275,6 +1341,11 @@
                 <data type="integer"/>
               </attribute>
               <optional>
+                <attribute name="intorder">
+                  <data type="integer"/>
+                </attribute>
+              </optional>
+              <optional>
                 <attribute name="nocite">
                   <data type="boolean"/>
                 </attribute>
@@ -1284,6 +1355,16 @@
               </data>
             </group>
           </choice>
+        </element>
+      </zeroOrMore>
+      <zeroOrMore>
+        <element name="bcf:citekeycount">
+          <attribute name="count">
+            <data type="integer"/>
+          </attribute>
+          <data type="string">
+            <param name="minLength">1</param>
+          </data>
         </element>
       </zeroOrMore>
     </element>
@@ -1318,6 +1399,24 @@
     option definitions
     use<name> options are dynamically determined from data model
   -->
+  <define name="extradatecontext">
+    <element name="bcf:option">
+      <attribute name="type">
+        <value>multivalued</value>
+      </attribute>
+      <element name="bcf:key">
+        <value>extradatecontext</value>
+      </element>
+      <oneOrMore>
+        <element name="bcf:value">
+          <attribute name="order">
+            <data type="integer"/>
+          </attribute>
+          <text/>
+        </element>
+      </oneOrMore>
+    </element>
+  </define>
   <define name="usenames">
     <oneOrMore>
       <element name="bcf:option">
@@ -1387,9 +1486,6 @@
           <attribute name="order">
             <data type="integer"/>
           </attribute>
-          <optional>
-            <attribute name="lang"/>
-          </optional>
           <text/>
         </element>
       </oneOrMore>
@@ -1577,9 +1673,24 @@
     full (true) = disambiguate with full name or initials, only up to maxcitenames/uniquelist
     allinit = disambiguate with initials, ignore maxcitenames/uniquelist
     allfull = disambiguate with full name or initials, ignore maxcitenames/uniquelist
-    mininit = disambiguate with initials, only between identical lists in different entries
-    minfull = disambiguate with full name or initials, only between identical lists in different entries
+    mininit = disambiguate with initials, only between identical lists of base names in different entries
+    minfull = disambiguate with full name or initials, only between identical lists of base names in different entries
+    minyearinit = disambiguate with initials, only between identical lists of base names and years in different entries
+    minyearfull = disambiguate with full name or initials, only between identical lists of base names and years in different entries
   -->
+  <define name="pluralothers">
+    <element name="bcf:option">
+      <attribute name="type">
+        <value>singlevalued</value>
+      </attribute>
+      <element name="bcf:key">
+        <value>pluralothers</value>
+      </element>
+      <element name="bcf:value">
+        <data type="boolean"/>
+      </element>
+    </element>
+  </define>
   <define name="uniquename">
     <element name="bcf:option">
       <attribute name="type">
@@ -1597,6 +1708,8 @@
           <value>allfull</value>
           <value>mininit</value>
           <value>minfull</value>
+          <value>minyearinit</value>
+          <value>minyearfull</value>
         </choice>
       </element>
     </element>
@@ -1861,9 +1974,6 @@
           <attribute name="order">
             <data type="integer"/>
           </attribute>
-          <optional>
-            <attribute name="lang"/>
-          </optional>
           <text/>
         </element>
       </oneOrMore>
@@ -2166,6 +2276,20 @@
                 </attribute>
               </optional>
               <optional>
+                <attribute name="map_matches">
+                  <data type="string">
+                    <param name="minLength">1</param>
+                  </data>
+                </attribute>
+              </optional>
+              <optional>
+                <attribute name="map_matchesi">
+                  <data type="string">
+                    <param name="minLength">1</param>
+                  </data>
+                </attribute>
+              </optional>
+              <optional>
                 <attribute name="map_matchi">
                   <data type="string">
                     <param name="minLength">1</param>
@@ -2245,7 +2369,7 @@
 </grammar>
 <!--
   Copyright 2009-2012 François Charette and Philip Kime, all rights reserved.
-  Copyright 2012-2020 Philip Kime, all rights reserved.
+  Copyright 2012-2024 Philip Kime, all rights reserved.
 -->
 <!--
   This code is free software.  You can redistribute it and/or

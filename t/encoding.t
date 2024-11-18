@@ -33,7 +33,7 @@ Log::Log4perl->init(\$l4pconf);
 Biber::Config->setoption('sortlocale', 'en_GB.UTF-8');
 
 my $encode1 = q|% $ biblatex auxiliary file $
-% $ biblatex bbl format version 3.1 $
+% $ biblatex bbl format version 3.3 $
 % Do not modify the above lines!
 %
 % This is an auxiliary file used by the 'biblatex' package.
@@ -52,8 +52,8 @@ my $encode1 = q|% $ biblatex auxiliary file $
 
 
 \refsection{0}
-  \datalist[entry]{nty/global//global/global}
-    \entry{testŠ}{book}{}
+  \datalist[entry]{nty/global//global/global/global}
+    \entry{testŠ}{book}{}{}
       \name{author}{1}{}{%
         {{un=0,uniquepart=base,hash=06a47edae2e847800cfd78323a0e6be8}{%
            family={Encalcer},
@@ -67,15 +67,17 @@ my $encode1 = q|% $ biblatex auxiliary file $
       }
       \strng{namehash}{06a47edae2e847800cfd78323a0e6be8}
       \strng{fullhash}{06a47edae2e847800cfd78323a0e6be8}
+      \strng{fullhashraw}{06a47edae2e847800cfd78323a0e6be8}
       \strng{bibnamehash}{06a47edae2e847800cfd78323a0e6be8}
       \strng{authorbibnamehash}{06a47edae2e847800cfd78323a0e6be8}
       \strng{authornamehash}{06a47edae2e847800cfd78323a0e6be8}
       \strng{authorfullhash}{06a47edae2e847800cfd78323a0e6be8}
+      \strng{authorfullhashraw}{06a47edae2e847800cfd78323a0e6be8}
       \field{labelalpha}{Enc99}
       \field{sortinit}{E}
       \field{sortinithash}{8da8a182d344d5b9047633dfc0cc9131}
       \field{extradatescope}{labelyear}
-      \field{labeldatesource}{year}
+      \field{labeldatesource}{}
       \true{singletitle}
       \field{labelnamesource}{author}
       \field{labeltitlesource}{title}
@@ -89,7 +91,7 @@ my $encode1 = q|% $ biblatex auxiliary file $
 |;
 
 my $encode2 = q|% $ biblatex auxiliary file $
-% $ biblatex bbl format version 3.1 $
+% $ biblatex bbl format version 3.3 $
 % Do not modify the above lines!
 %
 % This is an auxiliary file used by the 'biblatex' package.
@@ -108,8 +110,8 @@ my $encode2 = q|% $ biblatex auxiliary file $
 
 
 \refsection{0}
-  \datalist[entry]{nty/global//global/global}
-    \entry{test1}{book}{}
+  \datalist[entry]{nty/global//global/global/global}
+    \entry{test1}{book}{}{}
       \name{author}{1}{}{%
         {{un=0,uniquepart=base,hash=06a47edae2e847800cfd78323a0e6be8}{%
            family={Encalcer},
@@ -123,15 +125,17 @@ my $encode2 = q|% $ biblatex auxiliary file $
       }
       \strng{namehash}{06a47edae2e847800cfd78323a0e6be8}
       \strng{fullhash}{06a47edae2e847800cfd78323a0e6be8}
+      \strng{fullhashraw}{06a47edae2e847800cfd78323a0e6be8}
       \strng{bibnamehash}{06a47edae2e847800cfd78323a0e6be8}
       \strng{authorbibnamehash}{06a47edae2e847800cfd78323a0e6be8}
       \strng{authornamehash}{06a47edae2e847800cfd78323a0e6be8}
       \strng{authorfullhash}{06a47edae2e847800cfd78323a0e6be8}
+      \strng{authorfullhashraw}{06a47edae2e847800cfd78323a0e6be8}
       \field{labelalpha}{Enc99}
       \field{sortinit}{E}
       \field{sortinithash}{8da8a182d344d5b9047633dfc0cc9131}
       \field{extradatescope}{labelyear}
-      \field{labeldatesource}{year}
+      \field{labeldatesource}{}
       \true{singletitle}
       \field{labelnamesource}{author}
       \field{labeltitlesource}{title}
@@ -145,7 +149,7 @@ my $encode2 = q|% $ biblatex auxiliary file $
 |;
 
 my $encode3 = q|% $ biblatex auxiliary file $
-% $ biblatex bbl format version 3.1 $
+% $ biblatex bbl format version 3.3 $
 % Do not modify the above lines!
 %
 % This is an auxiliary file used by the 'biblatex' package.
@@ -164,8 +168,8 @@ my $encode3 = q|% $ biblatex auxiliary file $
 
 
 \refsection{0}
-  \datalist[entry]{nty/global//global/global}
-    \entry{test1}{book}{}
+  \datalist[entry]{nty/global//global/global/global}
+    \entry{test1}{book}{}{}
       \name{author}{1}{}{%
         {{un=0,uniquepart=base,hash=06a47edae2e847800cfd78323a0e6be8}{%
            family={Encalcer},
@@ -179,15 +183,17 @@ my $encode3 = q|% $ biblatex auxiliary file $
       }
       \strng{namehash}{06a47edae2e847800cfd78323a0e6be8}
       \strng{fullhash}{06a47edae2e847800cfd78323a0e6be8}
+      \strng{fullhashraw}{06a47edae2e847800cfd78323a0e6be8}
       \strng{bibnamehash}{06a47edae2e847800cfd78323a0e6be8}
       \strng{authorbibnamehash}{06a47edae2e847800cfd78323a0e6be8}
       \strng{authornamehash}{06a47edae2e847800cfd78323a0e6be8}
       \strng{authorfullhash}{06a47edae2e847800cfd78323a0e6be8}
+      \strng{authorfullhashraw}{06a47edae2e847800cfd78323a0e6be8}
       \field{labelalpha}{Enc99}
       \field{sortinit}{E}
       \field{sortinithash}{8da8a182d344d5b9047633dfc0cc9131}
       \field{extradatescope}{labelyear}
-      \field{labeldatesource}{year}
+      \field{labeldatesource}{}
       \true{singletitle}
       \field{labelnamesource}{author}
       \field{labeltitlesource}{title}
@@ -201,7 +207,7 @@ my $encode3 = q|% $ biblatex auxiliary file $
 |;
 
 my $encode5 = q|% $ biblatex auxiliary file $
-% $ biblatex bbl format version 3.1 $
+% $ biblatex bbl format version 3.3 $
 % Do not modify the above lines!
 %
 % This is an auxiliary file used by the 'biblatex' package.
@@ -220,8 +226,8 @@ my $encode5 = q|% $ biblatex auxiliary file $
 
 
 \refsection{0}
-  \datalist[entry]{nty/global//global/global}
-    \entry{test}{book}{}
+  \datalist[entry]{nty/global//global/global/global}
+    \entry{test}{book}{}{}
       \name{author}{1}{}{%
         {{un=0,uniquepart=base,hash=06a47edae2e847800cfd78323a0e6be8}{%
            family={Encalcer},
@@ -235,15 +241,17 @@ my $encode5 = q|% $ biblatex auxiliary file $
       }
       \strng{namehash}{06a47edae2e847800cfd78323a0e6be8}
       \strng{fullhash}{06a47edae2e847800cfd78323a0e6be8}
+      \strng{fullhashraw}{06a47edae2e847800cfd78323a0e6be8}
       \strng{bibnamehash}{06a47edae2e847800cfd78323a0e6be8}
       \strng{authorbibnamehash}{06a47edae2e847800cfd78323a0e6be8}
       \strng{authornamehash}{06a47edae2e847800cfd78323a0e6be8}
       \strng{authorfullhash}{06a47edae2e847800cfd78323a0e6be8}
+      \strng{authorfullhashraw}{06a47edae2e847800cfd78323a0e6be8}
       \field{labelalpha}{Enc99}
       \field{sortinit}{E}
       \field{sortinithash}{8da8a182d344d5b9047633dfc0cc9131}
       \field{extradatescope}{labelyear}
-      \field{labeldatesource}{year}
+      \field{labeldatesource}{}
       \true{singletitle}
       \field{labelnamesource}{author}
       \field{labeltitlesource}{title}
@@ -257,7 +265,7 @@ my $encode5 = q|% $ biblatex auxiliary file $
 |;
 
 my $encode6 = q|% $ biblatex auxiliary file $
-% $ biblatex bbl format version 3.1 $
+% $ biblatex bbl format version 3.3 $
 % Do not modify the above lines!
 %
 % This is an auxiliary file used by the 'biblatex' package.
@@ -276,8 +284,8 @@ my $encode6 = q|% $ biblatex auxiliary file $
 
 
 \refsection{0}
-  \datalist[entry]{nty/global//global/global}
-    \entry{test}{book}{}
+  \datalist[entry]{nty/global//global/global/global}
+    \entry{test}{book}{}{}
       \name{author}{1}{}{%
         {{un=0,uniquepart=base,hash=06a47edae2e847800cfd78323a0e6be8}{%
            family={Encalcer},
@@ -291,15 +299,17 @@ my $encode6 = q|% $ biblatex auxiliary file $
       }
       \strng{namehash}{06a47edae2e847800cfd78323a0e6be8}
       \strng{fullhash}{06a47edae2e847800cfd78323a0e6be8}
+      \strng{fullhashraw}{06a47edae2e847800cfd78323a0e6be8}
       \strng{bibnamehash}{06a47edae2e847800cfd78323a0e6be8}
       \strng{authorbibnamehash}{06a47edae2e847800cfd78323a0e6be8}
       \strng{authornamehash}{06a47edae2e847800cfd78323a0e6be8}
       \strng{authorfullhash}{06a47edae2e847800cfd78323a0e6be8}
+      \strng{authorfullhashraw}{06a47edae2e847800cfd78323a0e6be8}
       \field{labelalpha}{Enc99}
       \field{sortinit}{E}
       \field{sortinithash}{8da8a182d344d5b9047633dfc0cc9131}
       \field{extradatescope}{labelyear}
-      \field{labeldatesource}{year}
+      \field{labeldatesource}{}
       \true{singletitle}
       \field{labelnamesource}{author}
       \field{labeltitlesource}{title}
@@ -313,7 +323,7 @@ my $encode6 = q|% $ biblatex auxiliary file $
 |;
 
 my $encode7 = q|% $ biblatex auxiliary file $
-% $ biblatex bbl format version 3.1 $
+% $ biblatex bbl format version 3.3 $
 % Do not modify the above lines!
 %
 % This is an auxiliary file used by the 'biblatex' package.
@@ -332,8 +342,8 @@ my $encode7 = q|% $ biblatex auxiliary file $
 
 
 \refsection{0}
-  \datalist[entry]{nty/global//global/global}
-    \entry{test}{book}{}
+  \datalist[entry]{nty/global//global/global/global}
+    \entry{test}{book}{}{}
       \name{author}{1}{}{%
         {{un=0,uniquepart=base,hash=06a47edae2e847800cfd78323a0e6be8}{%
            family={Encalcer},
@@ -347,15 +357,17 @@ my $encode7 = q|% $ biblatex auxiliary file $
       }
       \strng{namehash}{06a47edae2e847800cfd78323a0e6be8}
       \strng{fullhash}{06a47edae2e847800cfd78323a0e6be8}
+      \strng{fullhashraw}{06a47edae2e847800cfd78323a0e6be8}
       \strng{bibnamehash}{06a47edae2e847800cfd78323a0e6be8}
       \strng{authorbibnamehash}{06a47edae2e847800cfd78323a0e6be8}
       \strng{authornamehash}{06a47edae2e847800cfd78323a0e6be8}
       \strng{authorfullhash}{06a47edae2e847800cfd78323a0e6be8}
+      \strng{authorfullhashraw}{06a47edae2e847800cfd78323a0e6be8}
       \field{labelalpha}{Enc99}
       \field{sortinit}{E}
       \field{sortinithash}{8da8a182d344d5b9047633dfc0cc9131}
       \field{extradatescope}{labelyear}
-      \field{labeldatesource}{year}
+      \field{labeldatesource}{}
       \true{singletitle}
       \field{labelnamesource}{author}
       \field{labeltitlesource}{title}

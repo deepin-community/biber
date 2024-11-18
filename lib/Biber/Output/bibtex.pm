@@ -14,7 +14,7 @@ use IO::File;
 use Log::Log4perl qw( :no_extra_logdie_message );
 use Scalar::Util qw(looks_like_number);
 use Text::Wrap;
-$Text::Wrap::columns = 80;
+$Text::Wrap::unexpand = 0;
 use Unicode::Normalize;
 my $logger = Log::Log4perl::get_logger('main');
 
@@ -84,11 +84,12 @@ sub set_output_macro {
   my $self = shift;
   my $macro = shift;
   my $acc = '';
-
   # Only output used macros unless we are asked to output all
   unless (Biber::Config->getoption('output_all_macrodefs')) {
     return unless $USEDSTRINGS{$macro};
   }
+
+
 
   # Make the right casing function
   my $casing;
@@ -105,7 +106,7 @@ sub set_output_macro {
 
   $acc .= '@';
   $acc .= $casing->('string');
-  $acc .= '{' . $casing->($macro) . ' = "' . Text::BibTeX::macro_text($macro) . "\"}\n";
+  $acc .= '{' . $casing->($macro) . ' = "' . NFD(decode('UTF-8', Text::BibTeX::macro_text($macro))) . "\"}\n";
 
   push $self->{output_data}{MACROS}->@*, $acc;
   return;
@@ -457,13 +458,14 @@ sub output {
 
   # Bibtex output uses just one special section, always sorted by global sorting spec
   foreach my $key ($Biber::MASTER->datalists->get_lists_by_attrs(section => 99999,
-                                                                 name => Biber::Config->getblxoption(undef, 'sortingtemplatename') . '/global//global/global',
+                                                                 name => Biber::Config->getblxoption(undef, 'sortingtemplatename') . '/global//global/global/global',
                                                                  type => 'entry',
                                                                  sortingtemplatename => Biber::Config->getblxoption(undef, 'sortingtemplatename'),
                                                                  sortingnamekeytemplatename => 'global',
                                                                  labelprefix => '',
                                                                  uniquenametemplatename => 'global',
-                                                                 labelalphanametemplatename => 'global')->[0]->get_keys->@*) {
+                                                                 labelalphanametemplatename => 'global',
+                                                                 namehashtemplatename       => 'global')->[0]->get_keys->@*) {
     out($target, ${$data->{ENTRIES}{99999}{index}{$key}});
   }
 
@@ -528,7 +530,13 @@ sub create_output_section {
 sub bibfield {
   my ($field, $value, $max_field_len) = @_;
   my $acc;
-  $acc .= ' ' x Biber::Config->getoption('output_indent');
+  my $inum = Biber::Config->getoption('output_indent');
+  my $ichar = ' ';
+  if (substr($inum, -1) eq 't') {
+    $ichar = "\t";
+    $inum = substr($inum, 0, length($inum)-1);
+  }
+  $acc .= $ichar x $inum;
   $acc .= $field;
   $acc .= ' ' x ($max_field_len - Unicode::GCString->new($field)->length) if $max_field_len;
   $acc .= ' = ';
@@ -548,8 +556,11 @@ sub bibfield {
       $casing = sub {ucfirst(shift)};
     }
 
+    $USEDSTRINGS{$m} = $value;
+
+    # Now value is the macro name, not the value
     $value = $casing->($m);
-    $USEDSTRINGS{$m} = 1;
+
   }
 
   # Don't wrap fields which should be macros in braces - we can only deal with macros
@@ -563,9 +574,16 @@ sub bibfield {
   else {
     $acc .= "\{$value\},\n";
   }
-  return $acc;
-}
 
+  if ($Text::Wrap::columns = Biber::Config->getoption('wraplines')) {
+    # +4 is for ' = {'
+    my $indent = $inum + ($max_field_len // Unicode::GCString->new($field)->length) + 4;
+    return wrap('', $ichar x $indent, $acc);
+  }
+  else {
+    return $acc;
+  }
+}
 
 =head2 construct_annotation
 
@@ -633,10 +651,27 @@ sub construct_datetime {
   my $overrideem;
   my $overrided;
 
-  my %seasons = ( 'spring' => 21,
-                  'summer' => 22,
-                  'autumn' => 23,
-                  'winter' => 24 );
+  my %yeardivisions = ( 'spring'  => 21,
+                        'summer'  => 22,
+                        'autumn'  => 23,
+                        'winter'  => 24,
+                        'springN' => 25,
+                        'summerN' => 26,
+                        'autumnN' => 27,
+                        'winterN' => 28,
+                        'springS' => 29,
+                        'summerS' => 30,
+                        'autumnS' => 31,
+                        'WinterS' => 32,
+                        'Q1'      => 33,
+                        'Q2'      => 34,
+                        'Q3'      => 35,
+                        'Q4'      => 36,
+                        'QD1'     => 37,
+                        'QD2'     => 38,
+                        'QD3'     => 39,
+                        'S1'      => 40,
+                        'S2'      => 41 );
 
   # Did the date fields come from interpreting an ISO8601-2:2016 unspecified date?
   # If so, do the reverse of Biber::Utils::parse_date_unspecified()
@@ -677,12 +712,12 @@ sub construct_datetime {
     }
   }
 
-  # Seasons derived from EDTF dates
-  if (my $s = $be->get_field("${d}season")) {
-    $overridem = $seasons{$s};
+  # Seasons derived from ISO 8601 dates
+  if (my $s = $be->get_field("${d}yeardivision")) {
+    $overridem = $yeardivisions{$s};
   }
-  if (my $s = $be->get_field("${d}endseason")) {
-    $overrideem = $seasons{$s};
+  if (my $s = $be->get_field("${d}endyeardivision")) {
+    $overrideem = $yeardivisions{$s};
   }
 
   # date exists if there is a start year
@@ -812,7 +847,7 @@ L<https://github.com/plk/biber/issues>.
 =head1 COPYRIGHT & LICENSE
 
 Copyright 2009-2012 François Charette and Philip Kime, all rights reserved.
-Copyright 2012-2020 Philip Kime, all rights reserved.
+Copyright 2012-2024 Philip Kime, all rights reserved.
 
 This module is free software.  You can redistribute it and/or
 modify it under the terms of the Artistic License 2.0.

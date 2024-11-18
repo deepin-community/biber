@@ -27,6 +27,7 @@ use Biber::UCollate;
 use Biber::Utils;
 use Carp;
 use Data::Dump;
+use Digest::MD5 qw( md5_hex );
 use Data::Compare;
 use Encode;
 use File::Copy;
@@ -126,7 +127,10 @@ sub display_end {
   }
 
   if ($self->{warnings}) {
-    $logger->info('WARNINGS: ' . $self->{warnings});
+    foreach my $w ($self->{warnings}->@*) {
+      $logger->warn(NFC($w)); # NFC boundary
+    }
+    $logger->info('WARNINGS: ' . scalar($self->{warnings}->@*));
   }
   if ($self->{errors}) {
     $logger->info('ERRORS: ' . $self->{errors});
@@ -304,12 +308,13 @@ sub tool_mode_setup {
 
   my $datalists = new Biber::DataLists;
   my $seclist = Biber::DataList->new(section => 99999,
-                                     sortingtemplatename => 'tool',
+                                     sortingtemplatename        => 'tool',
                                      sortingnamekeytemplatename => 'global',
-                                     uniquenametemplatename => 'global',
+                                     uniquenametemplatename     => 'global',
                                      labelalphanametemplatename => 'global',
-                                     labelprefix => '',
-                                     name => 'tool/global//global/global');
+                                     namehashtemplatename       => 'global',
+                                     labelprefix                => '',
+                                     name                       => 'tool/global//global/global/global');
   $seclist->set_type('entry');
   # Locale just needs a default here - there is no biblatex option to take it from
   Biber::Config->setblxoption(undef, 'sortlocale', 'en_US');
@@ -422,7 +427,7 @@ sub parse_ctrlfile {
   my $bcfxml = XML::LibXML::Simple::XMLin($buf,
                                           'ForceContent' => 1,
                                           'ForceArray' => [
-                                                           qr/\A(?:no)*citekey\z/,
+                                                           qr/\A(?:no)*citekey(?:count)?\z/,
                                                            qr/\Aoption\z/,
                                                            qr/\Aoptions\z/,
                                                            qr/\Avalue\z/,
@@ -446,6 +451,7 @@ sub parse_ctrlfile {
                                                            qr/\Asortingtemplate\z/,
                                                            qr/\Aper_datasource\z/,
                                                            qr/\Anosort\z/,
+                                                           qr/\Anonamestring\z/,
                                                            qr/\Amember\z/,
                                                            qr/\Anoinit\z/,
                                                            qr/\Anolabel\z/,
@@ -470,6 +476,7 @@ sub parse_ctrlfile {
                                                            qr/\Adatalist\z/,
                                                            qr/\Alabel(?:part|element|alpha(?:name)?template)\z/,
                                                            qr/\Auniquenametemplate\z/,
+                                                           qr/\Anamehashtemplate\z/,
                                                            qr/\Acondition\z/,
                                                            qr/\Afilter(?:or)?\z/,
                                                            qr/\Aoptionscope\z/,
@@ -717,6 +724,16 @@ sub parse_ctrlfile {
   # There is a default so don't set this option if nothing is in the .bcf
   Biber::Config->setoption('nosort', $nosort) if $nosort;
 
+  # NONAMESTRING
+  # Make the data structure look like the biber config file structure
+  # "field" and "value" are forced to arrays for other elements so we extract
+  # the first element here as they will always be only length=1
+  my $nonamestring;
+  foreach my $ns ($bcfxml->{nonamestrings}{nonamestring}->@*) {
+    push $nonamestring->@*, {name => $ns->{field}[0], value => $ns->{value}[0]};
+  }
+  Biber::Config->setoption('nonamestring', $nonamestring) if $nonamestring;
+
   # UNIQUENAME TEMPLATE
   my $unts;
   my $checkbase = 0;
@@ -737,6 +754,19 @@ sub parse_ctrlfile {
   biber_error("The uniquenametemplate must contain at least one 'base' part otherwise name disambiguation is impossible") unless $checkbase;
 
   Biber::Config->setblxoption(undef, 'uniquenametemplate', $unts);
+
+  # NAME HASH TEMPLATE
+  my $nhts;
+  foreach my $nht ($bcfxml->{namehashtemplate}->@*) {
+    my $nhtval = [];
+    foreach my $np (sort {$a->{order} <=> $b->{order}} $nht->{namepart}->@*) {
+      push $nhtval->@*, {namepart        => $np->{content},
+                         hashscope       => $np->{hashscope}};
+    }
+    $nhts->{$nht->{name}} = $nhtval;
+  }
+
+  Biber::Config->setblxoption(undef, 'namehashtemplate', $nhts);
 
   # SORTING NAME KEY
   # Use the order attributes to make sure things are in right order and create a data structure
@@ -764,7 +794,8 @@ sub parse_ctrlfile {
       }
       push $snkps->@*, $snps;
     }
-    $snss->{$sns->{name}} = $snkps;
+    $snss->{$sns->{name}}{visibility} = $sns->{visibility};
+    $snss->{$sns->{name}}{template} = $snkps;
   }
   Biber::Config->setblxoption(undef, 'sortingnamekeytemplate', $snss);
 
@@ -910,12 +941,13 @@ SECTION: foreach my $section ($bcfxml->{section}->@*) {
       # "all keys"
       if ($key eq '*') {
         $bib_section->set_allkeys(1);
+        Biber::Config->set_keyorder($secnum, $key, $keyc->{order});
         if ($keyc->{nocite}) {
           $bib_section->set_allkeys_nocite(1);
         }
         $key_flag = 1; # There is at least one key, used for error reporting below
       }
-      elsif (not Biber::Config->get_seenkey($key, $secnum)) {
+      elsif (not $bib_section->get_seenkey($key)) {
         # Dynamic set definition
         # Save dynamic key -> member keys mapping for set entry auto creation later
         # We still need to find these even if allkeys is set
@@ -935,11 +967,21 @@ SECTION: foreach my $section ($bcfxml->{section}->@*) {
           # Set order information - there is no order on dynamic key defs above
           # as they are a definition, not a cite
           Biber::Config->set_keyorder($secnum, $key, $keyc->{order});
+          # order of keys which have the same order so we can track order in \cite{a,b,c}
+          if ($keyc->{intorder}) {
+            Biber::Config->set_internal_keyorder($secnum, $key, $keyc->{intorder});
+          }
           push @keys, $key;
           $key_flag = 1; # There is at least one key, used for error reporting below
-          Biber::Config->incr_seenkey($key, $secnum);
         }
       }
+      $bib_section->incr_seenkey($key); # always increment
+    }
+
+    # Get citecounts if present
+    foreach my $keycount ($section->{citekeycount}->@*) {
+      my $key = NFD($keycount->{content}); # Key is already UTF-8 - it comes from UTF-8 XML
+      $bib_section->set_citecount($key, $keycount->{count});
     }
 
     if ($bib_section->is_allkeys) {
@@ -974,6 +1016,7 @@ SECTION: foreach my $section ($bcfxml->{section}->@*) {
     my $lsnksn = $list->{sortingnamekeytemplatename};
     my $luntn = $list->{uniquenametemplatename};
     my $llantn = $list->{labelalphanametemplatename};
+    my $lnhtn = $list->{namehashtemplatename};
     my $lpn = $list->{labelprefix};
     my $lname = $list->{name};
 
@@ -982,28 +1025,30 @@ SECTION: foreach my $section ($bcfxml->{section}->@*) {
                              name                       => $lname,
                              type                       => $ltype,
                              sortingtemplatename        => $lstn,
-                             sortingnamekeytemplatename    => $lsnksn,
+                             sortingnamekeytemplatename => $lsnksn,
                              labelprefix                => $lpn,
                              uniquenametemplatename     => $luntn,
-                             labelalphanametemplatename => $llantn)) {
+                             labelalphanametemplatename => $llantn,
+                             namehashtemplatename       => $lnhtn)) {
       if ($logger->is_debug()) {# performance tune
-        $logger->debug("Section datalist '$lname' of type '$ltype' with sortingtemplate '$lstn', sortingnamekeytemplatename '$lsnksn', labelprefix '$lpn', uniquenametemplate '$luntn' and labelalphanametemplate '$llantn' is repeated for section $lsection - ignoring");
+        $logger->debug("Section datalist '$lname' of type '$ltype' with sortingtemplate '$lstn', sortingnamekeytemplatename '$lsnksn', labelprefix '$lpn', uniquenametemplate '$luntn', labelalphanametemplate '$llantn' and namehashtemplate '$lnhtn' is repeated for section $lsection - ignoring");
       }
       next;
     }
 
     my $datalist = Biber::DataList->new(section                    => $lsection,
                                         sortingtemplatename        => $lstn,
-                                        sortingnamekeytemplatename    => $lsnksn,
+                                        sortingnamekeytemplatename => $lsnksn,
                                         uniquenametemplatename     => $luntn,
                                         labelalphanametemplatename => $llantn,
+                                        namehashtemplatename       => $lnhtn,
                                         labelprefix                => $lpn,
                                         name                       => $lname);
     $datalist->set_type($ltype || 'entry'); # lists are entry lists by default
-    $datalist->set_name($lname || "$lstn/$lsnksn/$lpn/$luntn/$llantn"); # default to ss+snkss+pn+untn+lantn
+    $datalist->set_name($lname || "$lstn/$lsnksn/$lpn/$luntn/$llantn/$lnhtn"); # default to ss+snkss+pn+untn+lantn+lnhtn
     foreach my $filter ($list->{filter}->@*) {
-      $datalist->add_filter({'type'  => $filter->{type},
-                            'value' => $filter->{content}});
+      $datalist->add_filter({type  => $filter->{type},
+                             value => $filter->{content}});
     }
     # disjunctive filters are an array ref of filter hashes
     foreach my $orfilter ($list->{filteror}->@*) {
@@ -1037,19 +1082,21 @@ SECTION: foreach my $section ($bcfxml->{section}->@*) {
     unless ($datalists->get_lists_by_attrs(section                    => $secnum,
                                            type                       => 'entry',
                                            sortingtemplatename        => $globalss,
-                                           sortingnamekeytemplatename    => 'global',
+                                           sortingnamekeytemplatename => 'global',
                                            uniquenametemplatename     => 'global',
                                            labelalphanametemplatename => 'global',
+                                           namehashtemplatename       => 'global',
                                            labelprefix                => '',
-                                           name                       => "$globalss/global//global/global")) {
+                                           name                       => "$globalss/global//global/global/global")) {
       my $datalist = Biber::DataList->new(section                    => $secnum,
                                           type                       => 'entry',
                                           sortingtemplatename        => $globalss,
-                                          sortingnamekeytemplatename    => 'global',
+                                          sortingnamekeytemplatename => 'global',
                                           uniquenametemplatename     => 'global',
                                           labelalphanametemplatename => 'global',
+                                          namehashtemplatename       => 'global',
                                           labelprefix                => '',
-                                          name                       => "$globalss/global//global/global");
+                                          name                       => "$globalss/global//global/global/global");
       $datalists->add_list($datalist);
       # See comment above
 
@@ -1098,10 +1145,11 @@ SECTION: foreach my $section ($bcfxml->{section}->@*) {
     my $datalist = Biber::DataList->new(section => 99999,
                                         sortingtemplatename => Biber::Config->getblxoption(undef, 'sortingtemplatename'),
                                         sortingnamekeytemplatename => 'global',
-                                        uniquenametemplatename => 'global',
+                                        uniquenametemplatename     => 'global',
                                         labelalphanametemplatename => 'global',
+                                        namehashtemplatename       => 'global',
                                         labelprefix => '',
-                                        name => Biber::Config->getblxoption(undef, 'sortingtemplatename') . '/global//global/global');
+                                        name => Biber::Config->getblxoption(undef, 'sortingtemplatename') . '/global//global/global/global');
     $datalist->set_type('entry');
     if ($logger->is_debug()) {# performance tune
       $logger->debug("Adding 'entry' list 'none' for pseudo-section 99999");
@@ -1143,10 +1191,11 @@ sub process_setup {
     unless ($self->datalists->has_lists_of_type_for_section($secnum, 'entry')) {
       my $datalist = Biber::DataList->new(sortingtemplatename => Biber::Config->getblxoption(undef, 'sortingtemplatename'),
                                           sortingnamekeytemplatename => 'global',
-                                          uniquenametemplatename => 'global',
+                                          uniquenametemplatename     => 'global',
                                           labelalphanametemplatename => 'global',
+                                          namehashtemplatename       => 'global',
                                           labelprefix => '',
-                                          name => Biber::Config->getblxoption(undef, 'sortingtemplatename') . '/global//global/global');
+                                          name => Biber::Config->getblxoption(undef, 'sortingtemplatename') . '/global//global/global/global');
       $datalist->set_type('entry');
       $datalist->set_section($secnum);
       $self->datalists->add_list($datalist);
@@ -1527,7 +1576,9 @@ sub calculate_interentry {
       if ($logger->is_debug()) {# performance tune
         $logger->debug("Incrementing crossrefkey count for entry '$refkey' via entry '$citekey'");
       }
-      Biber::Config->incr_crossrefkey($refkey);
+
+      # Don't increment if the crossref doesn't exist
+      Biber::Config->incr_crossrefkey($refkey) if $section->bibentry($refkey);
     }
 
     if (my $refkey = $be->get_field('xref')) {
@@ -1642,13 +1693,14 @@ sub validate_datamodel {
     my $dmwe = Biber::Config->getoption('dieondatamodel') ? \&biber_error : \&biber_warn;
     foreach my $citekey ($section->get_citekeys) {
       my $be = $section->bibentry($citekey);
+      my $bee = $be->get_field('entrytype');
       my $citekey = $be->get_field('citekey');
       my $et = $be->get_field('entrytype');
       my $ds = $section->get_keytods($citekey);
 
       # default entrytype to MISC type if not a known type
       unless ($dm->is_entrytype($et)) {
-        $dmwe->("Datamodel: Entry '$citekey' ($ds): Invalid entry type '" . $be->get_field('entrytype') . "' - defaulting to 'misc'", $be);
+        $dmwe->("Datamodel: $bee entry '$citekey' ($ds): Invalid entry type '" . $be->get_field('entrytype') . "' - defaulting to 'misc'", $be);
         $be->set_field('entrytype', 'misc');
         $et = 'misc';           # reset this too
       }
@@ -1661,7 +1713,7 @@ sub validate_datamodel {
       unless ($et eq 'xdata' or $et eq 'set') { # XDATA/SET are generic containers for any field
         foreach my $ef ($be->datafields) {
           unless ($dm->is_field_for_entrytype($et, $ef)) {
-            $dmwe->("Datamodel: Entry '$citekey' ($ds): Invalid field '$ef' for entrytype '$et'", $be);
+            $dmwe->("Datamodel: $bee entry '$citekey' ($ds): Invalid field '$ef' for entrytype '$et'", $be);
           }
         }
       }
@@ -1752,6 +1804,12 @@ MAIN:  foreach my $pn ($dmh->{namelistsall}->@*) {
       # per-name uniquenametemplatename
       if (defined($n->get_uniquenametemplatename)) {
         $untname = $n->get_uniquenametemplatename;
+      }
+
+      # Die if no uniquenametemplate found as this results in an infinite loop
+      # in the disambiguation code
+      unless (Biber::Config->getblxoption(undef, 'uniquenametemplate')->{$untname}) {
+        biber_error("No uniquenametemplate called '$untname' found, cannot continue.");
       }
 
       # per-name uniquename
@@ -1853,8 +1911,8 @@ MAIN:  foreach my $pn ($dmh->{namelistsall}->@*) {
       # of the sub are used
       $namedis->{$nlid}{$nid} = {nameun        => $nameun,
                                  namelistul    => $ul,
-                                 namestring    => $namestring,
-                                 namestrings   => $namestrings,
+                                 namestring    => strip_nonamestring($namestring, $nl->get_type),
+                                 namestrings   => [map {strip_nonamestring($_, $nl->get_type)} $namestrings->@*],
                                  namedisschema => $namedisschema};
     }
   }
@@ -1908,9 +1966,6 @@ sub process_entries_static {
 
     # generate labeltitle name
     $self->process_labeltitle($citekey);
-
-    # generate fullhash
-    $self->process_fullhash($citekey);
 
     # push entry-specific presort fields into the presort state
     $self->process_presort($citekey);
@@ -1982,6 +2037,9 @@ sub process_entries_post {
     $logger->debug("Postprocessing entries in section $secnum (after uniqueness)");
   }
   foreach my $citekey ( $section->get_citekeys ) {
+
+    # generate fullhashes
+    $self->process_fullhash($citekey, $dlist);
 
     # generate labelalpha information
     $self->process_labelalpha($citekey, $dlist);
@@ -2120,7 +2178,7 @@ sub process_workuniqueness {
   # Don't generate information for entries with no labelname or labeltitle
   # Use fullhash as this is not a test of uniqueness of only visible information
   if ($lni and Biber::Config->getblxoption(undef, 'singletitle', $bee, $citekey)) {
-    $identifier = $self->_getfullhash($citekey, $be->get_field($lni));
+    $identifier = $self->_getfullhash($citekey, $be->get_field($lni), $dlist);
 
     # Skip due to ignore settings?
     # Don't count towards singletitle being false if both labelname and labeltitle
@@ -2162,7 +2220,7 @@ sub process_workuniqueness {
   # Don't generate information for entries with no labelname and labeltitle
   # Should use fullhash this is not a test of uniqueness of only visible information
   if ($lni and $lti and Biber::Config->getblxoption(undef, 'uniquework', $bee, $citekey)) {
-    $identifier = $self->_getfullhash($citekey, $be->get_field($lni)) . $be->get_field($lti);
+    $identifier = $self->_getfullhash($citekey, $be->get_field($lni), $dlist) . $be->get_field($lti);
 
     # Skip due to ignore settings?
     unless (first {fc($lni) eq fc($_)} $ignore->{uniquework}->@* and
@@ -2177,7 +2235,7 @@ sub process_workuniqueness {
 
 =head2 process_extradate
 
-    Track labelname/date parts combination for generation of extradate
+    Track labelname/labeltitle+date parts combination for generation of extradate
 
 =cut
 
@@ -2187,12 +2245,12 @@ sub process_extradate {
   my $section = $self->sections->get_section($secnum);
   my $be = $section->bibentry($citekey);
   my $bee = $be->get_field('entrytype');
+  my $dm = Biber::Config->get_dm;
 
   # Generate labelname/year combination for tracking extradate
-  # * If there is no labelname to use, use empty string
-  # * If there is no date information to use, try year
-  # * Don't increment the seen_namedateparts count if the name string is empty
-  #   (see code in incr_seen_namedateparts method).
+  # * If there is no labelname/labeltitle to use, use empty string
+  # * Don't increment the seen_nametitledateparts count if the name/title string is empty
+  #   (see code in incr_seen_nametitledateparts method).
   # * Don't increment if skiplab is set
 
   if (Biber::Config->getblxoption(undef, 'labeldateparts', $bee, $citekey)) {
@@ -2204,9 +2262,26 @@ sub process_extradate {
       $logger->trace("Creating extradate information for '$citekey'");
     }
 
-    my $namehash = '';
-    if (my $lni = $be->get_labelname_info) {
-      $namehash = $self->_getnamehash_u($citekey, $be->get_field($lni), $dlist);
+    my $contexthash = '';
+    my $edc = Biber::Config->getblxoption(undef, 'extradatecontext');
+    foreach my $field ($edc->@*) {
+      my $fieldc = $field->{content};
+      if ($fieldc =~ m/^label.+/) {
+        my $method = "get_${fieldc}_info";
+        $fieldc = $be->$method;
+      }
+      if (my $fv = $be->get_field($fieldc)) {
+        if ($dm->field_is_datatype('name', $fieldc)) {
+          $contexthash = $self->_getnamehash_u($citekey, $fv, $dlist);
+        }
+        elsif ($dm->field_is_fieldtype('list', $fieldc)) {
+          $contexthash = md5_hex(encode_utf8(NFC(normalise_string_hash(join('', $fv->@*)))));
+        }
+        else {
+          $contexthash = md5_hex(encode_utf8(NFC(normalise_string_hash($fv))));
+        }
+        last;
+      }
     }
 
     my $datestring = ''; # Need a default empty string
@@ -2224,11 +2299,11 @@ sub process_extradate {
       }
     }
 
-    my $tracking_string = "$namehash,$datestring";
+    my $tracking_string = "$contexthash,$datestring";
 
     $be->set_field('extradatescope', $edscope);
-    $dlist->set_entryfield($citekey, 'namedateparts', $tracking_string);
-    $dlist->incr_seen_namedateparts($namehash, $datestring);
+    $dlist->set_entryfield($citekey, 'nametitledateparts', $tracking_string);
+    $dlist->incr_seen_nametitledateparts($contexthash, $datestring);
   }
 
   return;
@@ -2486,8 +2561,7 @@ sub process_labelname {
   }
 
   # Then we loop again to set the labelname name for the fullhash generation code
-  # This is because fullhash generation ignores SHORT* fields (section 4.2.4.1, BibLaTeX
-  # manual)
+  # This is because fullhash generation ignores SHORT* fields
   foreach my $h_ln ($lnamespec->@*) {
     my $ln = $h_ln->{content};
     if ( $ln =~ /\Ashort(.+)\z/xms ) {
@@ -2532,11 +2606,12 @@ sub process_labeldate {
   my $dm = Biber::Config->get_dm;
 
   if (Biber::Config->getblxoption(undef, 'labeldateparts', $bee, $citekey)) {
+
     my $ldatespec = Biber::Config->getblxoption(undef, 'labeldatespec', $bee);
     foreach my $lds ($ldatespec->@*) {
       my $pseudodate;
       my $ld = $lds->{content};
-      if ($lds->{'type'} eq 'field') { # labeldate field
+      if ($lds->{'type'} eq 'field') { # labeldate/year field
 
         my $ldy;
         my $ldey;
@@ -2546,12 +2621,13 @@ sub process_labeldate {
         my $ldmin;
         my $ldsec;
         my $ldtz;
-        my $datetype;
+        my $datetype = '';
 
-        # resolve dates
-        $datetype = $ld =~ s/date\z//xmsr;
-        if ($dm->field_is_datatype('date', $ld) and
-            $be->get_field("${datetype}datesplit")) { # real EDTF dates
+        # This effectively loses the distinction between DATE and YEAR fields
+        # which is what we want
+        $ldy = $ld;
+        if ($dm->field_is_datatype('date', $ld)) {
+          $datetype = $ld =~ s/date\z//xmsr;
           $ldy    = $datetype . 'year';
           $ldey   = $datetype . 'endyear';
           $ldm    = $datetype . 'month';
@@ -2561,8 +2637,7 @@ sub process_labeldate {
           $ldsec  = $datetype . 'second';
           $ldtz   = $datetype . 'timezone';
         }
-        else { # non-EDTF split date field so make a pseudo-year
-          $ldy = $ld;
+        else { # non-iso8601-2 split date field so make a pseudo-year
           $pseudodate = 1;
         }
 
@@ -2593,13 +2668,13 @@ sub process_labeldate {
     if (my $ldi = $be->get_labeldate_info) {
       if (my $df = $ldi->{field}) { # set labelyear to a field value
         my $pseudodate = $df->{pseudodate};
-        $be->set_field('labelyear', $be->get_field($df->{year}));
-        $be->set_field('labelmonth', $be->get_field($df->{month})) if $df->{month};
-        $be->set_field('labelday', $be->get_field($df->{day})) if $df->{day};
-        $be->set_field('labelhour', $be->get_field($df->{hour})) if $df->{hour};
-        $be->set_field('labelminute', $be->get_field($df->{minute})) if $df->{minute};
-        $be->set_field('labelsecond', $be->get_field($df->{second})) if $df->{second};
-        $be->set_field('labeltimezone', $be->get_field($df->{timezone})) if $df->{timezone};
+        $be->set_field('labelyear',       $be->get_field($df->{year}));
+        $be->set_field('labelmonth',      $be->get_field($df->{month}))    if $df->{month};
+        $be->set_field('labelday',        $be->get_field($df->{day}))      if $df->{day};
+        $be->set_field('labelhour',       $be->get_field($df->{hour}))     if $df->{hour};
+        $be->set_field('labelminute',     $be->get_field($df->{minute}))   if $df->{minute};
+        $be->set_field('labelsecond',     $be->get_field($df->{second}))   if $df->{second};
+        $be->set_field('labeltimezone',   $be->get_field($df->{timezone})) if $df->{timezone};
         $be->set_field('labeldatesource', $df->{source});
 
         # ignore endyear if it's the same as year
@@ -2612,40 +2687,38 @@ sub process_labeldate {
           $be->set_field('labelyear',
                          ($be->get_field('labelyear') // ''). '\bibdatedash ' . $be->get_field($ytype . 'endyear'));
         }
-        # construct labelmonth from start/end month field
-        if (not $pseudodate and
-            $be->get_field($ytype . 'endmonth')
-            and (($be->get_field($df->{month}) // '') ne $be->get_field($ytype . 'endmonth'))) {
-          $be->set_field('labelmonth',
-                         ($be->get_field('labelmonth') // '') . '\bibdatedash ' . $be->get_field($ytype . 'endmonth'));
-        }
-        # construct labelday from start/end month field
-        if (not $pseudodate and
-            $be->get_field($ytype . 'endday')
-            and (($be->get_field($df->{day}) // '') ne $be->get_field($ytype . 'endday'))) {
-          $be->set_field('labelday',
-                         ($be->get_field('labelday') // '') . '\bibdatedash ' . $be->get_field($ytype . 'endday'));
-        }
-        # construct labelhour from start/end hour field
-        if (not $pseudodate and
-            $be->get_field($ytype . 'endhour')
-            and (($be->get_field($df->{hour}) // '') ne $be->get_field($ytype . 'endhour'))) {
-          $be->set_field('labelhour',
-                         ($be->get_field('labelhour') // '') . '\bibdatedash ' . $be->get_field($ytype . 'endhour'));
-        }
-        # construct labelminute from start/end minute field
-        if (not $pseudodate and
-            $be->get_field($ytype . 'endminute')
-            and (($be->get_field($df->{minute}) // '') ne $be->get_field($ytype . 'endminute'))) {
-          $be->set_field('labelminute',
-                         ($be->get_field('labelminute') // '') . '\bibdatedash ' . $be->get_field($ytype . 'endminute'));
-        }
-        # construct labelsecond from start/end second field
-        if (not $pseudodate and
-            $be->get_field($ytype . 'endsecond')
-            and (($be->get_field($df->{second}) // '') ne $be->get_field($ytype . 'endsecond'))) {
-          $be->set_field('labelsecond',
-                         ($be->get_field('labelsecond') // '') . '\bibdatedash ' . $be->get_field($ytype . 'endsecond'));
+
+        if (not $pseudodate) {
+          # construct labelmonth from start/end month field
+          if ($be->get_field($ytype . 'endmonth')
+              and (($be->get_field($df->{month}) // '') ne $be->get_field($ytype . 'endmonth'))) {
+            $be->set_field('labelmonth',
+                           ($be->get_field('labelmonth') // '') . '\bibdatedash ' . $be->get_field($ytype . 'endmonth'));
+          }
+          # construct labelday from start/end month field
+          if ($be->get_field($ytype . 'endday')
+              and (($be->get_field($df->{day}) // '') ne $be->get_field($ytype . 'endday'))) {
+            $be->set_field('labelday',
+                           ($be->get_field('labelday') // '') . '\bibdatedash ' . $be->get_field($ytype . 'endday'));
+          }
+          # construct labelhour from start/end hour field
+          if ($be->get_field($ytype . 'endhour')
+              and (($be->get_field($df->{hour}) // '') ne $be->get_field($ytype . 'endhour'))) {
+            $be->set_field('labelhour',
+                           ($be->get_field('labelhour') // '') . '\bibdatedash ' . $be->get_field($ytype . 'endhour'));
+          }
+          # construct labelminute from start/end minute field
+          if ($be->get_field($ytype . 'endminute')
+              and (($be->get_field($df->{minute}) // '') ne $be->get_field($ytype . 'endminute'))) {
+            $be->set_field('labelminute',
+                           ($be->get_field('labelminute') // '') . '\bibdatedash ' . $be->get_field($ytype . 'endminute'));
+          }
+          # construct labelsecond from start/end second field
+          if ($be->get_field($ytype . 'endsecond')
+              and (($be->get_field($df->{second}) // '') ne $be->get_field($ytype . 'endsecond'))) {
+            $be->set_field('labelsecond',
+                           ($be->get_field('labelsecond') // '') . '\bibdatedash ' . $be->get_field($ytype . 'endsecond'));
+          }
         }
       }
       elsif (my $ys = $ldi->{string}) { # set labeldatesource to a fallback string
@@ -2701,8 +2774,7 @@ sub process_labeltitle {
 =cut
 
 sub process_fullhash {
-  my $self = shift;
-  my $citekey = shift;
+  my ($self, $citekey, $dlist) = @_;
   my $secnum = $self->get_current_section;
   my $section = $self->sections->get_section($secnum);
   my $be = $section->bibentry($citekey);
@@ -2714,14 +2786,16 @@ sub process_fullhash {
   # and also SHORT* fields etc.
   if (my $lnfhi = $be->get_labelnamefh_info) {
     if (my $lnfh = $be->get_field($lnfhi)) {
-      $be->set_field('fullhash', $self->_getfullhash($citekey, $lnfh));
+      $dlist->set_entryfield($citekey, 'fullhash', $self->_getfullhash($citekey, $lnfh, $dlist));
+      $dlist->set_entryfield($citekey, 'fullhashraw', $self->_getfullhashraw($citekey, $lnfh, $dlist));
     }
   }
 
   # Generate fullhash for all other name fields
   foreach my $n ($dmh->{namelistsall}->@*) {
     next unless my $nv = $be->get_field($n);
-    $be->set_field("${n}fullhash", $self->_getfullhash($citekey, $nv));
+    $dlist->set_entryfield($citekey, "${n}fullhash", $self->_getfullhash($citekey, $nv, $dlist));
+    $dlist->set_entryfield($citekey, "${n}fullhashraw", $self->_getfullhashraw($citekey, $nv, $dlist));
   }
 
   return;
@@ -2776,7 +2850,7 @@ sub process_pername_hashes {
   foreach my $pn ($dmh->{namelistsall}->@*) {
     next unless my $nl = $be->get_field($pn);
     foreach my $n ($nl->names->@*) {
-      my $pnhash = $self->_genpnhash($citekey, $n);
+      my $pnhash = $self->_genpnhash($citekey, $nl, $n, $dlist);
       $n->set_hash($pnhash);
       $dlist->set_namehash($nl->get_id, $n->get_id, $pnhash);
     }
@@ -2816,7 +2890,7 @@ sub process_visible_names {
     foreach my $n ($dmh->{namelistsall}->@*) {
       next unless my $nl = $be->get_field($n);
 
-      my $count = $nl->count_names;
+      my $count = $nl->count;
       my $visible_names_cite;
       my $visible_names_bib;
       my $visible_names_sort;
@@ -2859,6 +2933,16 @@ sub process_visible_names {
         $visible_names_cite = $count;
       }
 
+      # If biblatex option "pluralothers" is true, then "et al" must replace more than one element
+      # in a name list. This means that the visibility must be increased to the list length if
+      # the visibility is one less than the list count. If we don't do this, extra* will be incremented
+      # to disambiguate the list and this will be incorrect as biblatex.sty will detect "pluralothers"
+      # and print an unambiguous list which will be disambiguated by extra* unnecessarily.
+      if (Biber::Config->getblxoption(undef, 'pluralothers')  and
+          $count-$visible_names_cite==1) {
+        $visible_names_cite = $count;
+      }
+
       # max/minbibnames
       if ($count > $maxbn) {
         # Visibility to the uniquelist point if uniquelist is requested
@@ -2888,6 +2972,7 @@ sub process_visible_names {
       if ($logger->is_trace()) { # performance shortcut
         $logger->trace("Setting visible names (cite) for key '$citekey' to '$visible_names_cite'");
         $logger->trace("Setting visible names (bib) for key '$citekey' to '$visible_names_bib'");
+        $logger->trace("Setting visible names (sort) for key '$citekey' to '$visible_names_sort'");
         $logger->trace("Setting visible names (alpha) for key '$citekey' to '$visible_names_alpha'");
       }
 
@@ -2990,13 +3075,13 @@ sub process_lists {
     $list->set_sortingnamekeytemplatename('global') unless $list->get_sortingnamekeytemplatename;
     $list->set_uniquenametemplatename('global') unless $list->get_uniquenametemplatename;
     $list->set_labelalphanametemplatename('global') unless $list->get_labelalphanametemplatename;
+    $list->set_namehashtemplatename('global') unless $list->get_namehashtemplatename;
     $list->set_keys([ $section->get_citekeys ]);
     if ($logger->is_debug()) {  # performance tune
       $logger->debug("Populated datalist '$lname' of type '$ltype' with attributes '$lattrs' in section $secnum with keys: " . join(', ', $list->get_keys->@*));
     }
 
-    # A datalist represents a biblatex refcontext
-    # and many things are refcontext specific and so we need to use the right data. For
+    # Many things are refcontext specific and so we need to use the right data. For
     # example labelalphanametemplate and uniquenametemplate can be set per-list and much
     # processing uses these
 
@@ -3026,9 +3111,10 @@ sub process_lists {
     # Filtering - must come before sorting/labelling so that there are no gaps in e.g. extradate
     if (my $filters = $list->get_filters) {
       my $flist = [];
-    KEYLOOP: foreach my $k ($list->get_keys->@*) {
 
+    KEYLOOP: foreach my $k ($list->get_keys->@*) {
         my $be = $section->bibentry($k);
+
         foreach my $f ($filters->@*) {
           # Filter disjunction is ok if any of the checks are ok, hence the grep()
           if (ref $f eq 'ARRAY') {
@@ -3038,8 +3124,22 @@ sub process_lists {
             next KEYLOOP unless check_list_filter($k, $f->{type}, $f->{value}, $be);
           }
         }
+
         push $flist->@*, $k;
       }
+
+      # Now add set members of sets which have not been filtered out
+      my @sets = grep {$section->bibentry($_)->get_field('entrytype') eq 'set'} $flist->@*;
+      foreach my $k ($list->get_keys->@*) {
+        my $be = $section->bibentry($k);
+        if (first {$be->get_field('entryset')} @sets) {
+          push $flist->@*, $k;
+        }
+      }
+
+      # $flist now has the filtered list keys, possibly with duplicates due to sets so uniqify
+      $flist->@* = uniq $flist->@*;
+
       if ($logger->is_debug()) { # performance tune
         $logger->debug("Keys after filtering list '$lname' in section $secnum: " . join(', ', $flist->@*));
       }
@@ -3400,7 +3500,7 @@ sub create_uniquename_info {
     # would be uniquename = 2 unless even the full name doesn't disambiguate
     # and then it is left at uniquename = 0
 
-    my $num_names = $nl->count_names;
+    my $num_names = $nl->count;
     my $names = $nl->names;
 
     # If name list was truncated in bib with "and others", this overrides maxcitenames
@@ -3438,24 +3538,25 @@ sub create_uniquename_info {
       # Uniquelist is not set, a name list is longer than the maxcitenames truncation
       #   and the name appears before the mincitenames truncation
 
-      if ($un eq 'allinit' or $un eq 'allfull' or
+      if ($un eq 'allinit' or $un eq 'allfull' or $un eq 'minyearinit' or $un eq 'minyearfull' or
           ($ul and $n->get_index <= $ul) or
           $morenames or
           $num_names <= $maxcn or
           $n->get_index <= $mincn) { # implicitly, $num_names > $maxcn here
 
         $truncnames{$nid} = 1;
-        if ($un eq 'mininit' or $un eq 'minfull') {
+        if ($un eq 'mininit' or $un eq 'minfull' or $un eq 'minyearinit' or $un eq 'minyearfull') {
           push @basenames, $dlist->get_basenamestring($nlid, $nid);
           push @allnames, $dlist->get_namestring($nlid, $nid);
         }
       }
     }
+
     # Information for mininit or minfull, here the basename
     # and non-basename is all names in the namelist, not just the current name
     my $min_basename;
     my $min_namestring;
-    if ($un eq 'mininit' or $un eq 'minfull') {
+    if ($un eq 'mininit' or $un eq 'minfull' or $un eq 'minyearinit' or $un eq 'minyearfull') {
       $min_basename = join("\x{10FFFD}", @basenames);
       $min_namestring = join("\x{10FFFD}", @allnames);
       if ($#basenames + 1 < $num_names or $morenames) {
@@ -3481,6 +3582,12 @@ sub create_uniquename_info {
         $namedisamiguationscope = $min_basename;
         $nskey = $min_namestring;
         $dlist->set_unmininfo($nlid, $nid, $min_basename);
+      }
+      elsif ($un eq 'minyearinit' or $un eq 'minyearfull') {
+        my $lyear = $be->get_field('labelyear') // '';
+        $namedisamiguationscope = $min_basename . $lyear;
+        $nskey = $min_namestring . $lyear;
+        $dlist->set_unmininfo($nlid, $nid, $min_basename . $lyear);
       }
 
       if ($truncnames{$nid}) {
@@ -3553,7 +3660,7 @@ MAIN:  foreach my $citekey ( $section->get_citekeys ) {
     my $maxcn = Biber::Config->getblxoption($secnum, 'maxcitenames', $bee, $citekey);
     my $mincn = Biber::Config->getblxoption($secnum, 'mincitenames', $bee, $citekey);
 
-    my $num_names = $nl->count_names;
+    my $num_names = $nl->count;
     my $names = $nl->names;
     # If name list was truncated in bib with "and others", this overrides maxcitenames
     my $morenames = ($nl->get_morenames) ? 1 : 0;
@@ -3590,7 +3697,7 @@ MAIN:  foreach my $citekey ( $section->get_citekeys ) {
       my $namedisschema = $dlist->get_namedisschema($nlid, $nid);
       my $namescope = 'global'; # default
 
-      if ($un eq 'mininit' or $un eq 'minfull') {
+      if ($un eq 'mininit' or $un eq 'minfull' or $un eq 'minyearinit' or $un eq 'minyearfull') {
         $namescope = $dlist->get_unmininfo($nlid, $nid);
       }
 
@@ -3663,6 +3770,7 @@ sub create_uniquelist_info {
     next unless defined($lni); # only care about labelname
     my $nl = $be->get_field($lni);
     my $nlid = $nl->get_id;
+    my $labelyear = $be->get_field('labelyear');
 
     my $ul = Biber::Config->getblxoption($secnum, 'uniquelist', $bee, $citekey);
 
@@ -3677,7 +3785,7 @@ sub create_uniquelist_info {
       $logger->trace("Generating uniquelist information for '$citekey'");
     }
 
-    my $num_names = $nl->count_names;
+    my $num_names = $nl->count;
     my $namelist = [];
     my $ulminyear_namelist = [];
 
@@ -3716,7 +3824,7 @@ sub create_uniquelist_info {
 
       $dlist->add_uniquelistcount($namelist);
     }
-    # We need to know the list uniqueness counts for the whole list seperately otherwise
+    # We need to know the list uniqueness counts for the whole list separately otherwise
     # we will falsely "disambiguate" identical name lists from each other by setting
     # uniquelist to the full list because every part of each list will have more than
     # one count. We therefore need to distinguish counts which are of the final, complete
@@ -3724,10 +3832,15 @@ sub create_uniquelist_info {
     # two or more identical name lists), we don't expand them at all as there is no point.
     $dlist->add_uniquelistcount_final($namelist);
 
+    # uniquelist=minyear needs tracking only of namelists in same labelyear
+    if ($ul eq 'minyear') {
+      $dlist->add_uniquelistcount_final($namelist, $labelyear);
+    }
+
     # Add count for uniquelist=minyear
     unless (Compare($ulminyear_namelist, [])) {
       $dlist->add_uniquelistcount_minyear($ulminyear_namelist,
-                                          $be->get_field('labelyear'),
+                                          $labelyear,
                                           $namelist);
     }
   }
@@ -3751,6 +3864,7 @@ sub generate_uniquelist {
  MAIN: foreach my $citekey ( $section->get_citekeys ) {
     my $be = $bibentries->entry($citekey);
     my $bee = $be->get_field('entrytype');
+    my $labelyear = $be->get_field('labelyear');
     my $maxcn = Biber::Config->getblxoption($secnum, 'maxcitenames', $bee, $citekey);
     my $mincn = Biber::Config->getblxoption($secnum, 'mincitenames', $bee, $citekey);
     my $lni = $be->get_labelname_info;
@@ -3771,7 +3885,7 @@ sub generate_uniquelist {
     }
 
     my $namelist = [];
-    my $num_names = $nl->count_names;
+    my $num_names = $nl->count;
 
     foreach my $n ($nl->names->@*) {
       my $nid = $n->get_id;
@@ -3800,7 +3914,7 @@ sub generate_uniquelist {
       if ($ul eq 'minyear' and
           $num_names > $maxcn and
           $n->get_index <= $mincn and
-          $dlist->get_uniquelistcount_minyear($namelist, $be->get_field('labelyear')) == 1) {
+          $dlist->get_uniquelistcount_minyear($namelist, $labelyear) == 1) {
         if ($logger->is_trace()) { # performance tune
           $logger->trace("Not setting uniquelist=minyear for '$citekey'");
         }
@@ -3818,7 +3932,8 @@ sub generate_uniquelist {
     if ($logger->is_trace()) {  # performance tune
       $logger->trace("Setting uniquelist for '$citekey' using " . join(',', $namelist->@*));
     }
-    $dlist->set_uniquelist($nl, $namelist, $maxcn, $mincn);
+
+    $dlist->set_uniquelist($nl, $namelist, $labelyear, $ul, $maxcn, $mincn);
   }
   return;
 }
@@ -3879,12 +3994,12 @@ sub generate_contextdata {
       }
       # extradate
       if (Biber::Config->getblxoption(undef, 'labeldateparts', $bee, $key)) {
-        my $namedateparts = $dlist->get_entryfield($key, 'namedateparts');
-        if ($dlist->get_seen_namedateparts($namedateparts) > 1) {
+        my $nametitledateparts = $dlist->get_entryfield($key, 'nametitledateparts');
+        if ($dlist->get_seen_nametitledateparts($nametitledateparts) > 1) {
           if ($logger->is_trace()) {# performance tune
-            $logger->trace("namedateparts for '$namedateparts': " . $dlist->get_seen_namedateparts($namedateparts));
+            $logger->trace("nametitledateparts for '$nametitledateparts': " . $dlist->get_seen_nametitledateparts($nametitledateparts));
           }
-          my $v = $dlist->incr_seen_extradate($namedateparts);
+          my $v = $dlist->incr_seen_extradate($nametitledateparts);
           $dlist->set_extradatedata_for_key($key, $v);
         }
       }
@@ -4298,6 +4413,14 @@ sub preprocess_options {
     }
   }
 
+  # nonamestring - compile regexps
+  if (my $nonamestring = Biber::Config->getoption('nonamestring')) {
+    foreach my $nnopt ($nonamestring->@*) {
+      my $re = $nnopt->{value};
+      $nnopt->{value} = qr/$re/;
+    }
+  }
+
   # nolabel - compile regexps
   if (my $nolabel = Biber::Config->getoption('nolabel')) {
     foreach my $nsopt ($nolabel->@*) {
@@ -4525,10 +4648,10 @@ sub fetch_data {
 
     # Slightly different message for tool mode
     if (Biber::Config->getoption('tool')) {
-      $logger->info("Looking for $datatype format $type '$name'");
+      $logger->info("Looking for $datatype $type '$name'");
     }
     else {
-      $logger->info("Looking for $datatype format $type '$name' for section $secnum");
+      $logger->info("Looking for $datatype $type '$name' for section $secnum");
     }
 
     @remaining_keys = "${package}::extract_entries"->(locate_data_file($name), $encoding, \@remaining_keys);
@@ -4604,6 +4727,7 @@ sub get_dependents {
     else {
       # This must exist for all but dynamic sets
       my $be = $section->bibentry($citekey);
+      my $bee = $be->get_field('entrytype');
 
       # xdata
       if (my $xdata = $be->get_xdata_refs) {
@@ -4612,7 +4736,7 @@ sub get_dependents {
             # skip looking for dependent if it's already there (loop suppression)
             push $new_deps->@*, $xdref unless $section->bibentry($xdref);
             if ($logger->is_debug()) { # performance tune
-              $logger->debug("Entry '$citekey' has xdata '$xdref'");
+              $logger->debug("$bee entry '$citekey' has xdata '$xdref'");
             }
             push $keyswithdeps->@*, $citekey unless first {$citekey eq $_} $keyswithdeps->@*;
           }
@@ -4624,7 +4748,7 @@ sub get_dependents {
         # skip looking for dependent if it's already there (loop suppression)
         push $new_deps->@*, $refkey unless $section->bibentry($refkey);
         if ($logger->is_debug()) {# performance tune
-          $logger->debug("Entry '$citekey' has xref '$refkey'");
+          $logger->debug("$bee entry '$citekey' has xref '$refkey'");
         }
         push $keyswithdeps->@*, $citekey unless first {$citekey eq $_} $keyswithdeps->@*;
       }
@@ -4662,8 +4786,8 @@ sub get_dependents {
             # record that $rm is used as a related entry key
             $section->add_related($rm);
             push $new_deps->@*, $rm;
-            push $keyswithdeps->@*, $citekey unless first {$citekey eq $_} $keyswithdeps->@*;
           }
+          push $keyswithdeps->@*, $citekey unless first {$citekey eq $_} $keyswithdeps->@*;
         }
         if ($logger->is_debug()) {# performance tune
           $logger->debug("Entry '$citekey' has related entries: " . join(', ', $relkeys->@*));
@@ -4820,7 +4944,7 @@ sub remove_undef_dependent {
       if (first {$missing_key eq $_} $relkeys->@*) {
         $be->set_datafield('related', [ grep {$_ ne $missing_key} $relkeys->@* ]);
         # If no more related entries, remove the other related fields
-        unless ($be->get_field('related')) {
+        unless ($be->get_field('related')->@*) {
           $be->del_field('relatedtype');
           $be->del_field('relatedstring');
           if ($logger->is_trace()) {# performance tune
@@ -4831,7 +4955,7 @@ sub remove_undef_dependent {
       }
     }
   }
-    return;
+  return;
 }
 
 =head2 _parse_sort
@@ -4926,7 +5050,7 @@ L<https://github.com/plk/biber/issues>.
 =head1 COPYRIGHT & LICENSE
 
 Copyright 2009-2012 François Charette and Philip Kime, all rights reserved.
-Copyright 2012-2020 Philip Kime, all rights reserved.
+Copyright 2012-2024 Philip Kime, all rights reserved.
 
 This module is free software.  You can redistribute it and/or
 modify it under the terms of the Artistic License 2.0.

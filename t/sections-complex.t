@@ -40,15 +40,15 @@ Biber::Config->setoption('sortlocale', 'en_GB.UTF-8');
 # Biblatex options
 Biber::Config->setblxoption(undef,'maxcitenames', 1);
 Biber::Config->setblxoption(undef,'maxalphanames', 1);
-Biber::Config->setblxoption(undef,'labeldateparts', undef);
+Biber::Config->setblxoption(undef,'labeldateparts', 0);
 
 # Now generate the information
 $biber->prepare;
 my $section0 = $biber->sections->get_section(0);
 my $bibentries0 = $section0->bibentries;
-my $main0 = $biber->datalists->get_list('custom/global//global/global');
+my $main0 = $biber->datalists->get_list('custom/global//global/global/global');
 my $section1 = $biber->sections->get_section(1);
-my $main1 = $biber->datalists->get_list('custom/global//global/global', 1);
+my $main1 = $biber->datalists->get_list('custom/global//global/global/global', 1);
 
 my $bibentries1 = $section1->bibentries;
 
@@ -88,9 +88,9 @@ for (my $i=5; $i<9; $i++) {
 $biber->prepare;
 $section0 = $biber->sections->get_section(0);
 $bibentries0 = $section0->bibentries;
-$main0 = $biber->datalists->get_list('custom/global//global/global');
+$main0 = $biber->datalists->get_list('custom/global//global/global/global');
 $section1 = $biber->sections->get_section(1);
-$main1 = $biber->datalists->get_list('custom/global//global/global', 1);
+$main1 = $biber->datalists->get_list('custom/global//global/global/global', 1);
 
 $bibentries1 = $section1->bibentries;
 
@@ -130,9 +130,9 @@ for (my $i=5; $i<9; $i++) {
 $biber->prepare;
 $section0 = $biber->sections->get_section(0);
 $bibentries0 = $section0->bibentries;
-$main0 = $biber->datalists->get_list('custom/global//global/global');
+$main0 = $biber->datalists->get_list('custom/global//global/global/global');
 $section1 = $biber->sections->get_section(1);
-$main1 = $biber->datalists->get_list('custom/global//global/global', 1);
+$main1 = $biber->datalists->get_list('custom/global//global/global/global', 1);
 $bibentries1 = $section1->bibentries;
 
 eq_or_diff($main0->get_entryfield('L1', 'sortlabelalpha'), 'Doe95', 'maxalphanames=2 minalphanames=2 entry L1 labelalpha');
@@ -172,9 +172,9 @@ for (my $i=5; $i<9; $i++) {
 $biber->prepare;
 $section0 = $biber->sections->get_section(0);
 $bibentries0 = $section0->bibentries;
-$main0 = $biber->datalists->get_list('custom/global//global/global');
+$main0 = $biber->datalists->get_list('custom/global//global/global/global');
 $section1 = $biber->sections->get_section(1);
-$main1 = $biber->datalists->get_list('custom/global//global/global', 1);
+$main1 = $biber->datalists->get_list('custom/global//global/global/global', 1);
 $bibentries1 = $section1->bibentries;
 
 eq_or_diff($main0->get_entryfield('L1', 'sortlabelalpha'), 'Doe95', 'maxalphanames=3 minalphanames=1 entry L1 labelalpha');

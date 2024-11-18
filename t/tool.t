@@ -58,7 +58,7 @@ $ARGV[0] = 'tool.bib'; # fake this as we are not running through top-level biber
 $biber->tool_mode_setup;
 $biber->prepare_tool;
 my $main = $biber->datalists->get_lists_by_attrs(section         => 99999,
-                                      name                       => 'tool/global//global/global',
+                                      name                       => 'tool/global//global/global/global',
                                       type                       => 'entry',
                                       sortingtemplatename        => 'tool',
                                       sortingnamekeytemplatename => 'global',
@@ -181,11 +181,11 @@ my $gxd1 = q|@BOOK{gxd1,
 |;
 
 my $gxd2 = q|@BOOK{gxd1,
-  AUTHOR       = {family:Smith, given:Simon and xdata:gxd2+author},
+  AUTHOR       = {family:Smith, given:Simon and xdata:gxd2+author+1},
   EDITOR       = {xdata:gxd2+editor+2},
   TRANSLATOR   = {xdata:gxd2+author+3},
   LISTA        = {xdata:gxd3+location+5},
-  LOCATION     = {xdata:gxd3+location and B},
+  LOCATION     = {xdata:gxd3+location+1 and B},
   ORGANIZATION = {xdata:gxd2+author+3},
   PUBLISHER    = {xdata:gxd2},
   ADDENDUM     = {xdata:missing},
@@ -239,7 +239,7 @@ Biber::Config->setoption('output_xdatasep', '+');
 $biber->tool_mode_setup;
 $biber->prepare_tool;
 $main = $biber->datalists->get_list(section                    => 99999,
-                                    name                       => 'tool/global//global/global',
+                                    name                       => 'tool/global//global/global/global',
                                     type                       => 'entry',
                                     sortingtemplatename        => 'tool',
                                     sortingnamekeytemplatename => 'global',
@@ -269,7 +269,7 @@ Biber::Config->setoption('output_legacy_dates', '1');
 $biber->tool_mode_setup;
 $biber->prepare_tool;
 $main = $biber->datalists->get_list(section                    => 99999,
-                                    name                       => 'tool/global//global/global',
+                                    name                       => 'tool/global//global/global/global',
                                     type                       => 'entry',
                                     sortingtemplatename        => 'tool',
                                     sortingnamekeytemplatename => 'global',
@@ -289,7 +289,7 @@ Biber::Config->setoption('output_all_macrodefs', '1');
 $biber->tool_mode_setup;
 $biber->prepare_tool;
 $main = $biber->datalists->get_list(section                    => 99999,
-                                    name                       => 'tool/global//global/global',
+                                    name                       => 'tool/global//global/global/global',
                                     type                       => 'entry',
                                     sortingtemplatename        => 'tool',
                                     sortingnamekeytemplatename => 'global',

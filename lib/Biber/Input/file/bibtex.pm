@@ -741,6 +741,29 @@ sub create_entry {
                 $caseinsensitive = 1;
               }
 
+              my $caseinsensitives = 0;
+              my $mis;
+              # Case insensitive matches are normal matches with a special flag
+              if ($mis = $step->{map_matchesi}) {
+                $step->{map_matches} = $mis;
+                $caseinsensitives = 1;
+              }
+
+              if (my $ms = $step->{map_matches}) {
+                my @ms = split(/\s*,\s*/,$ms);
+                my @rs = split(/\s*,\s*/,$step->{map_replace});
+                unless (scalar(@ms) == scalar(@rs)) {
+                  $logger->debug("Source mapping (type=$level, key=$etargetkey): Different number of fixed matches vs replaces, skipping ...");
+                  next;
+                }
+                for (my $i = 0; $i <= $#ms; $i++) {
+                  if (($caseinsensitives and fc($last_fieldval) eq fc($ms[$i]))
+                      or ($last_fieldval eq $ms[$i])) {
+                    $etarget->set(encode('UTF-8', NFC($fieldsource)), $rs[$i]);
+                  }
+                }
+              }
+
               # map fields to targets
               if (my $m = maploopreplace($step->{map_match}, $maploop)) {
                 if (defined($step->{map_replace})) { # replace can be null
@@ -932,6 +955,7 @@ sub _create_entry {
   $bibentry->set_field('rawdata', $e->print_s);
 
   my $entrytype = $e->type;
+  $bibentry->set_field('entrytype', fc($entrytype));
 
   # We put all the fields we find modulo field aliases into the object
   # validation happens later and is not datasource dependent
@@ -964,11 +988,10 @@ sub _create_entry {
       }
     }
     elsif (Biber::Config->getoption('validate_datamodel')) {
-      biber_warn("Datamodel: Entry '$k' ($ds): Field '$f' invalid in data model - ignoring", $bibentry);
+      biber_warn("Datamodel: $entrytype entry '$k' ($ds): Field '$f' invalid in data model - ignoring", $bibentry);
     }
   }
 
-  $bibentry->set_field('entrytype', fc($entrytype));
   $bibentry->set_field('datatype', 'bibtex');
   if ($logger->is_debug()) {# performance tune
     $logger->debug("Adding entry with key '$k' to entry list");
@@ -1080,9 +1103,9 @@ sub _literal {
   if ($fc eq 'month') {
     return _hack_month($value);
   }
-  # Rationalise any bcp47 style langids into babel/polyglossia names
-  # biblatex will convert these back again when loading .lbx files
-  # We need this until babel/polyglossia support proper bcp47 language/locales
+  # Rationalise any BCP47 style langids into babel/polyglossia names
+  # We need this until babel/polyglossia support proper BCP47 language/locales and then
+  # biblatex needs to be changed as currently .lbx filenames are not BCP47 compliant
   elsif ($fc eq 'langid' and my $map = $LOCALE_MAP_R{$value}) {
     return $map;
   }
@@ -1184,7 +1207,7 @@ sub _name {
   my $xnamesep = Biber::Config->getoption('xnamesep');
   my $bee = $bibentry->get_field('entrytype');
 
-  my $names = Biber::Entry::Names->new();
+  my $names = Biber::Entry::Names->new('type' => $fc);
 
   my @tmp = Text::BibTeX::split_list(NFC($value),# Unicode NFC boundary
                                      Biber::Config->getoption('namesep'),
@@ -1272,7 +1295,7 @@ sub _name {
   }
 
   # Don't set if there were no valid names due to special errors above
-  return $names->count_names ? $names : undef;
+  return $names->count ? $names : undef;
 }
 
 # Dates
@@ -1283,6 +1306,7 @@ sub _datetime {
   my $secnum = $Biber::MASTER->get_current_section;
   my $section = $Biber::MASTER->sections->get_section($secnum);
   my $ds = $section->get_keytods($key);
+  my $bee = $bibentry->get_field('entrytype');
 
   my ($sdate, $edate, $sep, $unspec) = parse_date_range($bibentry, $datetype, $date);
 
@@ -1295,7 +1319,7 @@ sub _datetime {
 
   if (defined($sdate)) { # Start date was successfully parsed
     if ($sdate) { # Start date is an object not "0"
-      # Did this entry get its datepart fields from splitting an EDTF date field?
+      # Did this entry get its datepart fields from splitting an IS08601 date field?
       $bibentry->set_field("${datetype}datesplit", 1);
 
       # Some warnings for overwriting YEAR and MONTH from DATE
@@ -1324,9 +1348,9 @@ sub _datetime {
       $bibentry->set_field($datetype . 'dateuncertain', 1) if $CONFIG_DATE_PARSERS{start}->uncertain;
       $bibentry->set_field($datetype . 'enddateuncertain', 1) if $CONFIG_DATE_PARSERS{end}->uncertain;
 
-      # Save start season date information
-      if (my $season = $CONFIG_DATE_PARSERS{start}->season) {
-        $bibentry->set_field($datetype . 'season', $season);
+      # Save start yeardivision date information
+      if (my $yeardivision = $CONFIG_DATE_PARSERS{start}->yeardivision) {
+        $bibentry->set_field($datetype . 'yeardivision', $yeardivision);
       }
 
       unless ($CONFIG_DATE_PARSERS{start}->missing('year')) {
@@ -1365,7 +1389,7 @@ sub _datetime {
     if ($sep) {
       if (defined($edate)) { # End date was successfully parsed
         if ($edate) { # End date is an object not "0"
-          # Did this entry get its datepart fields from splitting an EDTF date field?
+          # Did this entry get its datepart fields from splitting an ISO8601-2 date field?
           $bibentry->set_field("${datetype}datesplit", 1);
 
           unless ($CONFIG_DATE_PARSERS{end}->missing('year')) {
@@ -1383,9 +1407,10 @@ sub _datetime {
                                    $CONFIG_DATE_PARSERS{end}->resolvescript($edate->day))
             unless $CONFIG_DATE_PARSERS{end}->missing('day');
 
-          # Save end season date information
-          if (my $season = $CONFIG_DATE_PARSERS{end}->season) {
-            $bibentry->set_field($datetype . 'endseason', $season);
+          # Save end yeardivision date information
+          if (my $yeardivision = $CONFIG_DATE_PARSERS{end}->yeardivision) {
+            $bibentry->set_field($datetype . 'endyeardivision', $yeardivision);
+            $bibentry->set_field($datetype . 'endseaason', $yeardivision); # legacy
           }
 
           # must be an hour if there is a time but could be 00 so use defined()
@@ -1406,12 +1431,12 @@ sub _datetime {
         }
       }
       else {
-        biber_warn("Entry '$key' ($ds): Invalid format '$date' of end date field '$field' - ignoring", $bibentry);
+        biber_warn("$bee entry '$key' ($ds): Invalid format '$date' of end date field '$field' - ignoring", $bibentry);
       }
     }
   }
   else {
-    biber_warn("Entry '$key' ($ds): Invalid format '$date' of date field '$field' - ignoring", $bibentry);
+    biber_warn("$bee entry '$key' ($ds): Invalid format '$date' of date field '$field' - ignoring", $bibentry);
   }
   return;
 }
@@ -1498,23 +1523,22 @@ sub cache_data {
       push $cache->{preamble}{$filename}->@*, $entry->value;
       next;
     }
-
     # Save comments for output in tool mode unless comment stripping is requested
-    if ( $entry->metatype == BTE_COMMENT ) {
+    elsif ( $entry->metatype == BTE_COMMENT ) {
       if (Biber::Config->getoption('tool') and not
           Biber::Config->getoption('strip_comments') ) {
         push $cache->{comments}{$filename}->@*, process_comment($entry->value);
       }
       next;
     }
-
     # Record macros in T::B so we can output then properly in tool mode
-    if ($entry->metatype == BTE_MACRODEF) {
+    elsif ($entry->metatype == BTE_MACRODEF) {
       foreach my $f ($entry->fieldlist) {
         $RSTRINGS{$entry->get($f)} = $f;
       }
       next;
     }
+
 
     # Ignore misc BibTeX entry types we don't care about
     next if ( $entry->metatype == BTE_UNKNOWN );
@@ -1703,15 +1727,19 @@ sub parse_decode {
       $lbuf .= "\n" . '}' . "\n\n";
     }
     elsif ($entry->metatype == BTE_PREAMBLE) {
-      $lbuf .= '@PREAMBLE{"' . Biber::LaTeX::Recode::latex_decode($entry->value) . '"}' . "\n";
+      $lbuf .= '@PREAMBLE{"';
+      $lbuf .= $entry->value;
+      $lbuf .=  '"}' . "\n";
     }
     elsif ($entry->metatype == BTE_COMMENT) {
-      $lbuf .= '@COMMENT{' . Biber::LaTeX::Recode::latex_decode($entry->value) . '}' . "\n";
+      $lbuf .= '@COMMENT{';
+      $lbuf .= $entry->value;
+      $lbuf .=  '}' . "\n";
     }
     elsif ($entry->metatype == BTE_MACRODEF) {
       $lbuf .= '@STRING{';
       foreach my $f ($entry->fieldlist) {
-        $lbuf .= $f . ' = {' . Biber::LaTeX::Recode::latex_decode($entry->get(encode('UTF-8', NFC($f)))) . '}';
+        $lbuf .= $f . ' = {' . $entry->get(encode('UTF-8', NFC($f))) . '}';
       }
       $lbuf .= "}\n";
     }
@@ -1842,6 +1870,7 @@ sub parsename {
       prefix         => {string => undef, initial => undef},
       suffix         => {string => undef, initial => undef},
       id             => 32RS0Wuj0P,
+      hashid         => 'someid',
       sortingnamekeytemplatename => 'template name',
     }
 
@@ -1868,13 +1897,16 @@ sub parsename_x {
       next;
     }
 
-    unless ($nps{$npn =~ s/-i$//r}) {
-      biber_warn("Invalid namepart '$npn' found in extended name format name '$fieldname' in entry '$key', ignoring");
+    unless ($nps{$npn =~ s/-i$//r} or $npn eq 'id') {# this is the hashid, not the internal unique ID
+      biber_warn("Invalid namepart option '$npn' found in extended name format name '$fieldname' in entry '$key', ignoring");
       next;
     }
 
     if ($npn =~ m/-i$/) {
       $namec{$npn} = _split_initials($npv);
+    }
+    elsif ($npn eq 'id') { # hashid
+      $namec{hashid} = $npv;
     }
     else {
       # Don't tie according to bibtex rules if the namepart is protected with braces
@@ -1908,21 +1940,26 @@ sub parsename_x {
     }
   }
 
-  my %nameparts;
+  my %nameinfo;
   foreach my $np (keys %nps) {
-    $nameparts{$np} = {string  => $namec{$np} // undef,
+    $nameinfo{$np} = {string  => $namec{$np} // undef,
                        initial => exists($namec{$np}) ? $namec{"${np}-i"} : undef};
 
     # Record max namepart lengths
-    $section->set_np_length($np, length($nameparts{$np}{string}))  if $nameparts{$np}{string};
-    $section->set_np_length("${np}-i", length(join('', $nameparts{$np}{initial}->@*)))  if $nameparts{$np}{initial};
+    $section->set_np_length($np, length($nameinfo{$np}{string}))  if $nameinfo{$np}{string};
+    $section->set_np_length("${np}-i", length(join('', $nameinfo{$np}{initial}->@*)))  if $nameinfo{$np}{initial};
+  }
+
+  # Add hashid if it exists
+  if (exists($namec{hashid})) {
+    $nameinfo{hashid} = $namec{hashid};
   }
 
   # The "strip" entry tells us which of the name parts had outer braces
   # stripped during processing so we can add them back when printing the
   # .bbl so as to maintain maximum BibTeX compatibility
   return  Biber::Entry::Name->new(
-                                  %nameparts,
+                                  %nameinfo,
                                   %pernameopts
                                  );
 }
@@ -2026,7 +2063,7 @@ L<https://github.com/plk/biber/issues>.
 =head1 COPYRIGHT & LICENSE
 
 Copyright 2009-2012 François Charette and Philip Kime, all rights reserved.
-Copyright 2012-2020 Philip Kime, all rights reserved.
+Copyright 2012-2024 Philip Kime, all rights reserved.
 
 This module is free software.  You can redistribute it and/or
 modify it under the terms of the Artistic License 2.0.

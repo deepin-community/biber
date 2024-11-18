@@ -45,6 +45,7 @@ start =
     datamodel? &
     element decodecharsset      { text }? &
     element debug               { "0" | "1" }? &
+    element dieondatamodel      { "0" | "1" }? &
     element fastsort            { "0" | "1" }? &
     element fixinits            { "0" | "1" }? &
     # Would never want this in the config file
@@ -81,6 +82,13 @@ start =
         attribute value { text }
       }+
     }? &
+    # nonamestring specification
+    element nonamestring     {
+      element option {
+        attribute name { text } &
+        attribute value { text }
+      }+
+    }? &
     element nostdmacros          { "0" | "1" }? &
     element onlylog              { "0" | "1" }? &
     element others_string        { text }? &
@@ -93,7 +101,8 @@ start =
     element output_field_replace { text }? &
     element output_file          { text }? &
     element output_format        { "bibtex" | "bbl" | "biblatexml" | "dot" }? &
-    element output_indent        { xsd:unsignedByte }? &
+    element output_indent        { xsd:string { pattern = "\d+t?" } }? &
+    element output_legacy_dates  { "0" | "1" }? &
     element output_listsep       { text }? &
     element output_namesep       { text }? &
     element output_no_macrodefs  { "0" | "1" }? &
@@ -113,6 +122,7 @@ start =
     labelalphanametemplate* &
     labelalphatemplate? &
     uniquenametemplate* &
+    namehashtemplate* &
     sortingnamekeytemplate? &
     sortingtemplate? &
     # presort default strings for different entry types
@@ -165,7 +175,7 @@ datamodel =
         attribute name { text },
         text
       }+
-    },
+    }?,
     # Valid entrytypes
     element entrytypes {
       element entrytype {
@@ -205,7 +215,7 @@ datamodel =
     # Allowable multiscript fields which can have alternate form/languages
     element multiscriptfields {
       element field { text }+
-    },
+    }?,
     # Constraints on field (co-)existence and format
     element constraints {
       # Set of entrytypes that this constraint applies to
@@ -259,7 +269,7 @@ datamodel =
             )+
           )
         )
-      }*
+      }+
     }+
   }
 
@@ -353,6 +363,8 @@ map =
           attribute map_final { "1" }?,
           attribute map_match { xsd:string {minLength="1"} }?,
           attribute map_matchi { xsd:string {minLength="1"} }?,
+          attribute map_matches { xsd:string {minLength="1"} }?,
+          attribute map_matchesi { xsd:string {minLength="1"} }?,
           attribute map_notmatch { xsd:string {minLength="1"} }?,
           attribute map_notmatchi { xsd:string {minLength="1"} }?,
           attribute map_replace { xsd:string }?,
@@ -409,7 +421,7 @@ uniquenametemplate =
   element uniquenametemplate {
     attribute name { xsd:string {minLength="1"} },
     element namepart {
-     attribute order { xsd:integer },
+      attribute order { xsd:integer },
       attribute use { "0" | "1" }?,
       attribute base { "0" | "1" }?,
       attribute context { "none" | "init" | "initorfull" | "full" }?,
@@ -417,9 +429,20 @@ uniquenametemplate =
     }+
   }
 
+namehashtemplate = 
+  element namehashtemplate {
+    attribute name { xsd:string {minLength="1"} },
+    element namepart {
+      attribute order { xsd:integer },
+      attribute hashscope { "init" | "full" },
+      text
+    }+
+  }
+
 sortingnamekeytemplate = 
   element sortingnamekeytemplate {
     attribute name { text },
+    attribute visibility { text },
     element keypart {
       attribute order { xsd:integer },
       element part {
@@ -475,7 +498,7 @@ element sort {
 dmfieldtype =  "field" | "list"
 dmdatatype =  "literal" | "name" | "key" | "entrykey" | "date" | "verbatim" | "integer" | "range" | "code" | "uri" | "datepart" | "keyword" | "option"
 
-# Copyright 2012-2020 Philip Kime, all rights reserved.
+# Copyright 2012-2024 Philip Kime, all rights reserved.
 
 # This code is free software.  You can redistribute it and/or
 # modify it under the terms of the Artistic License 2.0.
